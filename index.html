@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Бомж v0.1</title>
+<link rel="stylesheet" href="style.css?v=20261120b">
+<link rel="stylesheet" href="art.css?v=20261120b">
+</head>
+<body>
+<div id="game">
+
+  <div id="field">
+    <div id="layer-places"></div>
+    <div id="layer-tiles"></div>
+    <div id="layer-bars"></div>
+
+    <div id="shop-menu" class="hidden">
+      <div class="shop-title" id="shop-title">Ларёк</div>
+      <div id="shop-goods"></div>
+      <div class="shop-note">Esc, ✕ или клик мимо — закрыть</div>
+    </div>
+  </div>
+
+  <div id="hud">
+    <div id="weather">
+      <span id="weather-icon"></span>
+      <div id="weather-text">
+        <div id="weather-main"><span id="weather-temp"></span><span id="weather-wind"></span><span id="weather-precip"></span></div>
+        <div id="weather-sub"><span id="weather-feels"></span><span id="weather-caption"></span></div>
+      </div>
+    </div>
+
+    <div id="clock">
+      <span id="clock-dial"></span>
+      <span id="phase-label">День 1 из 7</span>
+    </div>
+
+    <div id="goals"></div>
+
+    <div id="sound-panel">
+      <button id="sound-btn" type="button" aria-label="Звук: вкл/выкл (M)" title="Звук: вкл/выкл (M)">🔊</button>
+      <input id="sound-vol" type="range" min="0" max="100" step="1" aria-label="Громкость">
+      <button id="rec-btn" type="button"></button>
+    </div>
+    <div id="speed-panel">
+      <button id="pause-btn" type="button" aria-label="Пауза">⏸</button>
+      <span id="speed-btns"></span>
+    </div>
+  </div>
+
+  <div id="tooltip" class="hidden">
+    <div id="tooltip-title"></div>
+    <div id="tooltip-lines"></div>
+  </div>
+
+  <div id="bottom-bar">
+    <div id="vitals">
+      <div class="stat" id="stat-satiety">
+        <span class="stat-label">Сытость</span>
+        <span class="stat-track"><span class="stat-fill" id="stat-satiety-fill"></span></span>
+        <span class="stat-value" id="stat-satiety-value">0</span>
+      </div>
+      <div class="stat" id="stat-warmth">
+        <span class="stat-label">Тепло</span>
+        <span class="stat-track"><span class="stat-fill" id="stat-warmth-fill"></span></span>
+        <span class="stat-value" id="stat-warmth-value">0</span>
+        <span id="warmth-rate"></span>
+      </div>
+      <div class="stat" id="stat-health">
+        <span class="stat-label">Здоровье</span>
+        <span class="stat-track"><span class="stat-fill" id="stat-health-fill"></span></span>
+        <span class="stat-value" id="stat-health-value">0</span>
+      </div>
+      <div class="stat" id="stat-energy">
+        <span class="stat-label">Бодрость</span>
+        <span class="stat-track"><span class="stat-fill" id="stat-energy-fill"></span></span>
+        <span class="stat-value" id="stat-energy-value">0</span>
+      </div>
+      <div id="money"><span id="money-icon">💰</span><span id="money-value">0</span> ₽</div>
+    </div>
+    <div id="gear">
+      <div id="gear-head"><span id="gear-title">Надето</span><span id="gear-sum"></span></div>
+      <div id="gear-slots"></div>
+    </div>
+    <div id="inventory">
+      <div id="inv-head"><span id="inv-title">Пакет</span> <span id="inv-count">0/6</span><span id="inv-mark" class="hidden"></span></div>
+      <div id="inv-slots"></div>
+    </div>
+    <div id="log"></div>
+  </div>
+  <div id="pause-banner" class="hidden"><span id="pause-title">Пауза</span><span id="pause-note" class="hidden"></span></div>
+
+  <div id="start-screen">
+    <div id="start-card">
+      <h1 id="start-title"></h1>
+      <div id="start-intro"></div>
+      <h2 id="start-how-title"></h2>
+      <ul id="start-how"></ul>
+      <div id="start-btns"><button id="start-btn" type="button"></button><button id="continue-btn" type="button" class="hidden"></button></div>
+      <div id="start-stale" class="hidden"></div>
+      <div id="start-note"></div>
+      <button id="start-rec-btn" type="button" class="rec-link"></button>
+    </div>
+  </div>
+
+  <div id="end-screen" class="hidden">
+    <div id="end-card">
+      <h1 id="end-title"></h1>
+      <p id="end-cause"></p>
+      <p id="end-lived"></p>
+      <button id="restart-btn" type="button">Ещё раз</button>
+      <button id="end-rec-btn" type="button" class="rec-link"></button>
+    </div>
+  </div>
+
+  <div id="rec-screen" class="hidden">
+    <div id="rec-card">
+      <button id="rec-close" type="button"></button>
+      <h1 id="rec-title"></h1>
+      <div id="rec-intro"></div>
+      <div id="rec-dir-block">
+        <h2 id="rec-dir-title"></h2>
+        <div id="rec-where"></div><div id="rec-last"></div><div id="rec-why"></div>
+        <div id="rec-dir-btns"><button id="rec-dir" type="button"></button><button id="rec-dir-ok" type="button" class="hidden"></button><button id="rec-dir-forget" type="button" class="hidden"></button></div>
+      </div>
+      <h2 id="rec-mode-title"></h2>
+      <div id="rec-modes"></div>
+      <button id="rec-now" type="button"></button>
+      <h2 id="rec-list-title"></h2>
+      <ul id="rec-list"></ul>
+      <div id="rec-note"></div>
+    </div>
+  </div>
+
+</div>
+<script src="data.js?v=20261120b"></script>
+<script src="game.js?v=20261120b"></script>
+<script src="sound.js?v=20261120b"></script>
+<script src="art.js?v=20261120b"></script>
+</body>
+</html>
