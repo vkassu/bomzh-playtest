@@ -193,6 +193,27 @@
       '<path d="M29 26.5l6 3-26 13-6-3z" fill="#cdbf94" opacity=".85"/>' +
       '<path d="M40 33l8 4M38 40l5 2.5" stroke="#77593a" stroke-width="2"/>' +
       '<path d="M12 42l5 2.5M14 47l8 4" stroke="#6b5136" stroke-width="1.5"/>'); },
+    'item:boards': function () { return svg(64, 64,
+      sh(32, 52, 27, 5) +
+      '<g transform="rotate(-27 32 32)">' +
+      '<path d="M8 18h46v10H8z" fill="#bd9465"' + O + '/>' +
+      '<path d="M4 30h50v10H4z" fill="#906641"' + O + '/>' +
+      '<path d="M12 42h46v9H12z" fill="#c59b69"' + O + '/>' +
+      '<path d="M13 23h14m7 1q6-4 14-1M9 35h18m6 1h14M17 47q8-3 16-1m7 1h12" fill="none" stroke="#6a492e" stroke-width="1.7"/>' +
+      '<path d="M11 21v4m40-4v4M7 33v4m47 7v4" stroke="#49382f" stroke-width="2"/></g>'); },
+    'item:rags': function () { return svg(64, 64,
+      sh(31, 53, 25, 5) +
+      '<path d="M6 40l12-17 22-4 17 22-4 7-7-1-5 6-8-3-7 5-5-5-8 1z" fill="#77858b"' + O + '/>' +
+      '<path d="M10 37l9-17 14-6 12 7 7 19-9-2-4 5-6-4-7 3-3-5-6 3z" fill="#ab7974"' + O + '/>' +
+      '<path d="M20 33l7-12m3 14l3-13m9 13l-5-11M15 46l6-5m21 6l4-5" fill="none" stroke="#65565b" stroke-width="2.4"/>'); },
+    'item:film': function () { return svg(64, 64,
+      sh(32, 54, 25, 5) +
+      '<path d="M16 26l29-13 7 12q-7 11 6 17L26 55Q10 47 16 26z" fill="#9ecdd4" fill-opacity=".78"' + O + '/>' +
+      '<path d="M20 34l20-9-5 10 12 4-18 9" fill="none" stroke="#edfaff" stroke-width="2.4"/>' +
+      '<path d="M11 24l34-15q7-2 10 6t-3 11L18 41z" fill="#bedce1"' + O + '/>' +
+      '<path d="M20 26l28-12" stroke="#f4ffff" stroke-width="3"/>' +
+      '<ellipse cx="15" cy="32" rx="7" ry="10" transform="rotate(-22 15 32)" fill="#81a6b1"' + O + '/>' +
+      '<ellipse cx="15" cy="32" rx="2.5" ry="5" transform="rotate(-22 15 32)" fill="#514c43"/>'); },
     'item:shawarma': function () { return svg(64, 64,
       sh(32, 55, 18, 5) +
       '<g transform="rotate(-24 32 34)"><path d="M18 21h28l-4 33q-10 5-20 0z" fill="#d9d4c4"' + O + '/>' +
