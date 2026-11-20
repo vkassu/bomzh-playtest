@@ -1,0 +1,146 @@
+/* Зимний двор на главном экране. */
+#start-screen {
+  --paper: #efe7d8;
+  --lamplight: #ffc27b;
+  justify-content: flex-start;
+  overflow: auto;
+  color: var(--paper);
+  background: linear-gradient(90deg, rgba(11,17,22,.66), rgba(11,17,22,.25) 36%, transparent 64%),
+              #202a31 url("menu-courtyard.webp") center / cover no-repeat;
+}
+#start-card {
+  flex: 0 0 auto;
+  width: min(32rem, 46vw);
+  max-height: none;
+  margin: auto 0;
+  padding: 2rem 0 2rem clamp(2rem, 8vw, 10rem);
+  overflow: visible;
+  color: var(--paper);
+  background: none;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  transform: none;
+  font-family: Georgia, "Times New Roman", serif;
+}
+#start-card::before, #start-card::after { content: none; }
+#start-title {
+  margin: 0 0 clamp(1rem, 5vh, 3.25rem);
+  font: bold clamp(4.2rem, 8.5vw, 9rem)/.95 Georgia, "Times New Roman", serif;
+  letter-spacing: -.045em;
+  text-align: left;
+  text-transform: uppercase;
+  color: var(--paper);
+  text-shadow: 0 4px 16px #111a20;
+}
+#start-btns {
+  display: grid;
+  justify-content: stretch;
+  gap: 2px;
+  max-width: 19.5rem;
+  margin: 0;
+}
+#start-btns button {
+  margin: 0;
+  padding: .54em .75em;
+  text-align: left;
+  color: var(--paper);
+  border: 0;
+  border-left: 2px solid transparent;
+  border-radius: 0;
+  background: rgba(13,20,24,.36);
+  font: 500 clamp(1rem, 1.55vw, 1.5rem)/1.25 Georgia, "Times New Roman", serif;
+  cursor: pointer;
+}
+#start-btns #start-btn {
+  color: #251d19;
+  background: #ebbc82;
+  border-color: #ffe3b9;
+  font-weight: bold;
+}
+#start-btns button:hover, #start-btns button:focus-visible {
+  color: white;
+  background: rgba(22,30,35,.86);
+  border-color: var(--lamplight);
+}
+#start-btns #start-btn:hover, #start-btns #start-btn:focus-visible { background: #ffcf94; color: #231b17; }
+#start-stale { text-align: left; color: #fed8a6; margin-top: .75rem; }
+.menu-tools { display: flex; gap: 1.2rem; margin-top: clamp(1rem, 4vh, 2.25rem); align-items: center; }
+.menu-tools button, .menu-tools #start-rec-btn {
+  margin: 0; padding: .4rem 0; border: 0; color: #ece5d9; background: none;
+  font: 500 .9rem/1.3 system-ui, sans-serif; text-decoration: underline; text-underline-offset: .25em; cursor: pointer;
+}
+#start-screen button:focus-visible, #save-modal button:focus-visible, .hud-file-btn:focus-visible {
+  outline: 2px solid #ffe0a9; outline-offset: 2px;
+}
+#menu-info-dialog, #save-panel {
+  box-sizing: border-box;
+  width: min(33rem, calc(100vw - 2rem));
+  max-height: calc(100dvh - 2rem);
+  padding: clamp(1rem, 3vw, 2rem);
+  overflow: auto;
+  border: 1px solid #787269;
+  background: #222a2d;
+  color: #eee7db;
+  text-align: left;
+  font: 1rem/1.5 system-ui, sans-serif;
+  box-shadow: 0 1rem 4rem rgba(0,0,0,.48);
+}
+#menu-info-dialog::backdrop, #save-modal { background: rgba(9,14,17,.82); }
+#menu-info-dialog h2, #save-title { margin: 0 0 1rem; color: #f1d0a0; font: bold 1.8rem/1.1 Georgia, serif; }
+#menu-info-dialog #start-how-title { color: inherit; border-color: #687174; }
+#menu-info-dialog li::marker { color: #e0ad78; }
+#menu-info-dialog #start-note { color: #c9c5b9; text-align: left; font-size: .8rem; }
+#menu-info-close, #save-close, #save-list button {
+  padding: .55em 1em;
+  background: #364043;
+  border: 1px solid #7b827c;
+  border-radius: 2px;
+  color: #f5eee2;
+  font: inherit;
+  cursor: pointer;
+}
+#menu-info-close { margin-top: .75rem; }
+#menu-info-close:hover, #save-close:hover, #save-list button:hover:enabled { background: #47504d; }
+#save-modal { position: absolute; inset: 0; z-index: 120; display: grid; place-items: center; }
+#save-list { display: grid; gap: .45rem; }
+#save-list button { width: 100%; text-align: left; }
+#save-list button:disabled { opacity: .6; cursor: default; }
+#save-status { font-size: .88rem; color: #f0cf9c; }
+#save-status:empty { margin: 0; }
+#save-close { margin-top: 1rem; }
+#end-load-btn {
+  color: #211d17; background: #cfba94; border: 1px solid #574837; border-radius: 3px;
+  cursor: pointer; font: inherit; padding: .5rem 1rem;
+}
+.hud-file-btn {
+  display: grid; place-items: center; padding: 0; width: 30px; height: 30px;
+  background: #242d32; border: 1px solid #6a7476; border-radius: 3px; color: #ece3cf; cursor: pointer;
+}
+.hud-file-btn:hover { background: #3c484b; }
+.hud-file-btn svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linejoin: round; }
+@media (max-width: 1200px) {
+  #hud { overflow-x: auto; scrollbar-width: thin; }
+  #hud .hud-file-btn {
+    position: fixed; top: calc(var(--top-h) + 5px); width: 36px; height: 36px;
+    box-shadow: 0 2px 6px rgba(0,0,0,.48);
+  }
+  #manual-save-btn { right: 46px; }
+  #manual-load-btn { right: 6px; }
+  #field.painted-courtyard ~ #hud #manual-save-btn { right: auto; left: 6px; }
+  #field.painted-courtyard ~ #hud #manual-load-btn { right: auto; left: 46px; }
+}
+@media (max-width: 650px) {
+  #start-screen {
+    align-items: flex-end;
+    background-image: linear-gradient(0deg, rgba(7,13,17,.95), rgba(7,13,17,.58) 53%, transparent 88%), url("menu-courtyard.webp");
+    background-position: center, 70% center;
+  }
+  #start-card { width: min(100%, 26rem); margin: auto 0 0; padding: 1.25rem 1.5rem; }
+}
+@media (max-height: 480px) {
+  #start-card { padding-top: .75rem; padding-bottom: .75rem; }
+  #start-title { margin-bottom: .6rem; font-size: 3.25rem; }
+  .menu-tools { margin-top: .4rem; }
+  #start-btns button { padding-top: .28em; padding-bottom: .28em; }
+}

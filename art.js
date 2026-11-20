@@ -46,6 +46,19 @@
     return svg(120, 88, b);
   }
 
+  // Обустройство внутри нарисованного лаза. Бетонные плиты уже есть на фоне.
+  function denInterior(stage) {
+    var layers = '<path d="M3 28l27-8 51 1 8 5-4 7-66 2z" fill="#a37d50" stroke="#5e4936"/>' +
+      '<path d="M11 28l27-5m-7 9l17-6m6 2l23-4" fill="none" stroke="#73573c"/>';
+    if (stage >= 2) layers += '<path d="M5 25l12-12 9 4 8-4 14 8-4 6-13-1-10 3z" fill="#776869" stroke="#49434a"/>' +
+      '<path d="M43 21l10-11 22 2-4 12z" fill="#b4ac95" stroke="#685f56"/><path d="M55 14l14 1m-16 2l12 1" stroke="#817b70"/>';
+    if (stage >= 3) layers += '<path d="M8 3l9 1-3 26-9 2zM19 2l9 1-2 25-9 1z" fill="#8f6d4e" stroke="#514437"/>' +
+      '<path d="M7 11l21-2m-22 13l20-2" stroke="#4b4135" stroke-width="2"/>';
+    if (stage >= 4) layers += '<path d="M65 16l15-2 10 4v12l-19 2-6-4z" fill="#8c6646" stroke="#483a2d"/>' +
+      '<path d="M66 18l6 3 17-2m-17 2v10" fill="none" stroke="#c09a6c"/>';
+    return svg(94, 36, layers);
+  }
+
   var SPRITES = {
     /* места, 120x88 */
     'place:bin': function () { return svg(120, 88,
@@ -159,6 +172,10 @@
     'placeStage:den-2': function () { return denSprite(2); },
     'placeStage:den-3': function () { return denSprite(3); },
     'placeStage:den-4': function () { return denSprite(4); },
+    'denInterior:1': function () { return denInterior(1); },
+    'denInterior:2': function () { return denInterior(2); },
+    'denInterior:3': function () { return denInterior(3); },
+    'denInterior:4': function () { return denInterior(4); },
     /* предметы, 64x64 */
     'item:bottle': function () { return svg(64, 64,
       sh(32, 53, 22, 5) +
@@ -692,6 +709,7 @@
 
   /* Куда какой вид спрайта попадает: первый селектор — плитка на поле, остальные — мелкие копии. */
   var SPRITE_TARGETS = {
+    denInterior: function (stage) { return [null, '.painted-courtyard #place-den.stage-' + stage + '::before']; },
     place: function (t) { return ['.place-' + t + ' .place-emoji']; },
     placeOpen: function (t) { return ['#place-' + t + '.door-open .place-emoji']; },
     placeClosed: function (t) { return ['#place-' + t + '.closed .place-emoji']; },
@@ -731,6 +749,7 @@
    *  Двор (статичный canvas) и эффекты (свет, снег, пар)
    * ===================================================================== */
   var field, bg, fx, bc, fc, frostCv = null, W = 0, H = 0, raf = 0, lastT = 0;
+  var courtyard = null;
   var NIGHT = 0.72;                // плотность темноты ночью
   var dark = 0;
   var windows = [], winTimer = 0, houseH = 0, houseW = 0, roadY = 0;
@@ -875,6 +894,26 @@
   }
 
   function drawBg() {
+    if (courtyard) {
+      // Изображение и точки взаимодействия растягиваются в одних и тех же долях игрового поля.
+      bc.drawImage(courtyard, 0, 0, W, H);
+      // Границы стёкол фасада на исходном холсте 1808×870. Рамы и снег остаются поверх света.
+      var glazed = [[29, 24, 50, 56, 78, 80], [200, 24, 221, 228, 252, 80],
+        [303, 24, 322, 330, 353, 77], [498, 21, 519, 526, 552, 78],
+        [607, 23, 627, 636, 656, 79], [927, 22, 946, 956, 978, 77],
+        [1032, 23, 1052, 1062, 1084, 79], [1145, 23, 1165, 1175, 1200, 80]];
+      windows = glazed.map(function (g, index) {
+        return { x: g[0] * W / 1808, y: g[1] * H / 870, w: (g[4] - g[0]) * W / 1808, h: (g[5] - g[1]) * H / 870,
+          pane1: (g[2] - g[0]) * W / 1808, pane2: (g[3] - g[0]) * W / 1808, lit: index % 3 !== 0, tone: index % 2 === 0 };
+      });
+      lampPuddle = null;
+      lamp.x = W * 0.658; lamp.y = H * 0.349;
+      streetLamps = [0.09, 0.369, 0.611, 0.898].map(function (x) { return { x: x * W, y: H * 0.778 }; });
+      heatVents = [[0.083, 0.428], [0.075, 0.53], [0.075, 0.628], [0.076, 0.69]].map(function (point) {
+        return { x: point[0] * W, y: point[1] * H, w: 0.045 * W };
+      });
+      return;
+    }
     var c = bc, r = rngFrom(20261117), i, x, y;
     houseH = Math.max(84, H * 0.15);
     houseW = W * 0.8;
@@ -1135,7 +1174,7 @@
       var w = list[i];
       if (!w || w.fixed) continue;
       var lit = Math.random() < target;
-      if (lit !== w.lit || all) { w.lit = lit; drawWindow(w); }
+      if (lit !== w.lit || all) { w.lit = lit; if (!courtyard) drawWindow(w); }
     }
   }
 
@@ -1284,6 +1323,17 @@
     }
     /* тёплый свет поверх */
     fc.globalCompositeOperation = 'lighter';
+    if (courtyard && k > 0.01) {
+      windows.forEach(function (win) {
+        if (!win.lit) return;
+        var tint = win.tone ? '255,167,85' : '255,204,137';
+        glow(win.x + win.w / 2, win.y + win.h / 2, win.w * 1.15, 0.21 * k, tint);
+        fc.fillStyle = 'rgba(' + tint + ',' + 0.68 * k + ')';
+        fc.fillRect(win.x, win.y, win.pane1, win.h * 0.31);
+        fc.fillRect(win.x, win.y + win.h * 0.38, win.pane1, win.h * 0.62);
+        fc.fillRect(win.x + win.pane2, win.y, win.w - win.pane2, win.h);
+      });
+    }
     for (i = 0; i < lights.length; i++) {
       var L = lights[i], aa = L.w * L.a * (L.fire ? Math.max(0.45, k) : k);
       if (L.w > 0 && aa > 0.004) glow(L.x, L.y, L.r * 0.95, aa, L.fire ? '255,150,60' : '255,184,96');
@@ -1311,7 +1361,7 @@
 
     /* пар: теплотрасса, люк, дыхание героя */
     el = document.getElementById('place-pipe');
-    if (el && Math.random() < dt * 16) {
+    if (!courtyard && el && Math.random() < dt * 16) {
       p = centerOf(el, fr);
       puffs.push({ x: p.x - 44 + Math.random() * 88, y: p.y - 26, vx: 9 + Math.random() * 12, vy: -16 - Math.random() * 16, t: 0, max: 2.2 + Math.random() * 1.6, r0: 6, r1: 26 + Math.random() * 12, a: 0.2 });
     }
@@ -1319,7 +1369,7 @@
       var hv = heatVents[Math.floor(Math.random() * heatVents.length)];
       puffs.push({ x: hv.x - hv.w * 0.3 + Math.random() * hv.w * 0.6, y: hv.y, vx: 4 + Math.random() * 8, vy: -10 - Math.random() * 10, t: 0, max: 1.6 + Math.random() * 1.2, r0: 4, r1: 15 + Math.random() * 8, a: 0.16 });
     }
-    if (Math.random() < dt * 3) puffs.push({ x: W * 0.57 - 10 + Math.random() * 20, y: H * 0.71 - 4, vx: 8 + Math.random() * 6, vy: -12 - Math.random() * 8, t: 0, max: 2 + Math.random(), r0: 4, r1: 18, a: 0.12 });
+    if (!courtyard && Math.random() < dt * 3) puffs.push({ x: W * 0.57 - 10 + Math.random() * 20, y: H * 0.71 - 4, vx: 8 + Math.random() * 6, vy: -12 - Math.random() * 8, t: 0, max: 2 + Math.random(), r0: 4, r1: 18, a: 0.12 });
     breathT -= dt;
     var hero = document.querySelector('.tile.hero');
     var warmEl = document.getElementById('stat-warmth-value');
@@ -1399,6 +1449,13 @@
     field.appendChild(frostCv);
     bc = bg.getContext('2d'); fc = fx.getContext('2d');
     resize();
+    var plate = new Image();
+    plate.onload = function () {
+      courtyard = plate;
+      if (W && H) drawBg();
+      field.classList.add('painted-courtyard');
+    };
+    plate.src = 'courtyard.webp?v=024';
     dark = field.classList.contains('night') ? NIGHT : 0;
     window.addEventListener('resize', resize);
     raf = requestAnimationFrame(frame);

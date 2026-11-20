@@ -2524,10 +2524,23 @@
       return { w: r.width, h: r.height, now: function () { return Date.now(); },
         record: D.record.on ? { window: { w: global.innerWidth, h: global.innerHeight } } : null };
     }
-    function newGame(sv, stored) {
+    function newGame(sv, stored, branch) {
       var r = elField.getBoundingClientRect();
+      var previous = game;
       game = createGame(gameOpts(r));
-      if (sv) game.loadState(sv, stored);                // правка 017: продолжить сохранённое (continueGame)
+      if (sv) {
+        var freshId = game.rec && game.rec.head.id;
+        try {
+          if (!game.loadState(sv, stored)) throw new Error('save');
+          if (branch && freshId && game.rec) {
+            game.rec.head.parentId = game.rec.head.id;
+            game.rec.head.id = freshId;
+          }
+        } catch (error) {
+          game = previous;
+          return false;
+        }
+      }
       store.flushed = 0; store.overDone = false; store.broken = false; store.fullNoted = false; store.lastPhase = game.state.phase;
       menuSig = null; gearSig = null;
       elTiles.innerHTML = '';
@@ -2565,6 +2578,7 @@
       elEnd.classList.add('hidden');
       setPaused(false);
       render();
+      return true;
     }
 
     function setPaused(v, why) {
@@ -3049,20 +3063,13 @@
       intro.innerHTML = ''; how.innerHTML = '';
       C.intro.forEach(function (s) { var p = document.createElement('p'); p.textContent = s; intro.appendChild(p); });
       C.how.forEach(function (s) { var li = document.createElement('li'); li.textContent = s; how.appendChild(li); });
-      /* правка 017: есть сохранение этой сборки — «Продолжить»; чужой сборки — выброшено, одна строка с шуткой */
-      var sv = readSave(), cb = $('continue-btn'), st = $('start-stale');
-      if (sv === 'stale') { st.textContent = D.texts.saveStale[Math.floor(Math.random() * D.texts.saveStale.length)]; st.classList.remove('hidden'); }
-      else if (sv) {
-        cb.textContent = C.continueBtn.split('{n}').join(sv.day);
-        cb.classList.remove('hidden');
-        $('start-btn').textContent = C.newBtn;
-        cb.addEventListener('click', function () { if (!started) continueGame(sv); });
-      }
+      $('continue-btn').textContent = C.continueBtn;
+      $('continue-btn').classList.remove('hidden');
+      $('continue-btn').addEventListener('click', function () { openSlots('load', this); });
       $('start-btn').addEventListener('click', function () {
         if (started) return;
         started = true;
         elStart.classList.add('hidden');
-        if (sv && sv !== 'stale') lsDel(D.record.keys.save);   // новый забег вытесняет сохранённый: слот один
         flushRec();
       });
     }
@@ -3373,12 +3380,12 @@
       elPauseBtn.blur();
     });
     document.addEventListener('keydown', function (e) {
+      if (slotMode || !started || game.state.over || document.querySelector('dialog[open]')) return;
       if (e.code === 'Space' || e.key === ' ') {
         e.preventDefault();
         if (!e.repeat && !game.state.over) setPaused(!paused, 'key');
         return;
       }
-      if (!started || game.state.over) return;          // карточка старта и экран конца клавиши не слушают
       if (e.code === 'Escape' && game.state.menuOpen) { e.preventDefault(); game.closeMenu(); render(); return; }
       if (MOVE_KEYS[e.code]) {
         e.preventDefault();
@@ -3399,6 +3406,11 @@
     });
     /* Окно потеряло фокус или вкладка скрыта — пауза. Возврат паузу НЕ снимает: игрок снимает её сам. */
     function awayPause() {
+      if (slotMode && slotWasRunning) {
+        slotWasRunning = false;
+        awayPaused = true;
+        setPaused(true, 'away');
+      }
       if (!game || !started || game.state.over || paused) return;       // не начата, кончилась или уже на паузе — не трогаем
       awayPaused = true;
       setPaused(true, 'away');
@@ -3504,7 +3516,7 @@
         };
       });
     }
-    function dirName(f) { return 'bomzh_zapis_' + stamp(f.head.started) + '.json'; }
+    function dirName(f) { return 'bomzh_zapis_' + stamp(f.head.started) + (f.head.parentId ? '_' + f.head.id : '') + '.json'; }
     function dirQuery() {
       if (!dirState.handle) { dirState.perm = 'none'; return Promise.resolve(); }
       return dirState.handle.queryPermission({ mode: 'readwrite' }).then(function (p) { dirState.perm = p; }, function () { dirState.perm = 'prompt'; });
@@ -3546,7 +3558,7 @@
     /* Записать файл: в папку, если можно; иначе скачиванием (и в окне «Записи» видно, почему) */
     function saveRec(f, why) {
       if (!f) return;
-      var cur = game && game.rec && f.head.id === curId(), day = f.head.day || 1;
+      var day = f.head.day || 1;
       function viaDownload(reason) {
         dirState.reason = reason;
         var ok = downloadRec(f, why);
@@ -3561,7 +3573,7 @@
         if (dirState.perm !== 'granted') { viaDownload('perm'); return; }
         return dirWrite(f).then(function () {
           dirState.lastOk = Date.now(); dirState.lastDay = day; dirState.lastWhere = 'dir'; dirState.reason = '';
-          if (cur) { game.recEvent('export', { why: why, dir: 1 }); if (why !== 'list' && why !== 'dir') game.note('recSaved', { n: day }); }
+          if (f.head.id === curId()) { game.recEvent('export', { why: why, dir: 1 }); if (why !== 'list' && why !== 'dir') game.note('recSaved', { n: day }); }
           if (recOpen()) renderRecWindow();
         }, function () { viaDownload('fail'); });
       });
@@ -3569,12 +3581,26 @@
     function exportMode() { var m = lsGet(RK.mode); return RD.exportModes.indexOf(m) >= 0 ? m : RD.exportDefault; }
     function exportCurrent(why) { if (!game || !game.rec) return; flushRec(); saveRec(game.recFile(), why); }
 
-    /* ---------- сохранение: один слот ---------- */
-    function readSave() {
-      var sv = lsJson(RK.save);
-      if (!sv) return null;
-      if (sv.kind !== 'bomzh-save' || sv.build !== D.build || sv.formatVersion !== D.save.formatVersion) { lsDel(RK.save); return 'stale'; }
-      return sv;
+    /* Старый ключ сохраняет роль автослота. Каждая ручная ячейка записывается целиком одним setItem. */
+    function slotKey(id) { return id === 'auto' ? RK.save : RK.save + '.' + id; }
+    function slotName(id) { return id === 'auto' ? 'Автосохранение' : 'Ячейка ' + id; }
+    function readSlot(id) {
+      var raw, sv;
+      try { raw = global.localStorage.getItem(slotKey(id)); }
+      catch (e) { return { error: 'Хранилище браузера недоступно', blocked: true }; }
+      if (raw === null) return {};
+      try { sv = JSON.parse(raw); } catch (e) { /* покажем повреждённую ячейку */ }
+      if (!sv || sv.kind !== 'bomzh-save') return { error: 'Повреждённая запись' };
+      if (sv.build !== D.build || sv.formatVersion !== D.save.formatVersion) return { error: 'Другая версия игры' };
+      var s = sv.S;
+      if (!s || !s.hero || !s.weather || !s.den || !s.worn || !s.tele ||
+          !Array.isArray(s.inv) || !Array.isArray(s.items) || !Array.isArray(s.npcs) ||
+          !Number.isInteger(s.phase) || !Number.isFinite(s.phaseTime) || !Number.isInteger(sv.nextId) ||
+          (sv.rec && (!sv.rec.head || !sv.rec.head.id || !sv.rec.w || !Number.isInteger(sv.rec.n))) ||
+          (id !== 'auto' && sv.rec && (!sv.history || !Array.isArray(sv.history.events) || sv.history.events.length !== sv.rec.n))) {
+        return { error: 'Повреждённая запись' };
+      }
+      return { save: sv };
     }
     function writeSave() {
       if (!D.save.on || !game || game.state.over) return;
@@ -3586,22 +3612,118 @@
       if (store.overDone) return;
       store.overDone = true;
       flushRec();
-      if (!D.save.keepAfterDeath) lsDel(RK.save);
+      if (!D.save.keepAfterDeath) {
+        var auto = readSlot('auto').save;
+        if (auto && (!auto.rec || auto.rec.head.id === curId())) lsDel(RK.save);
+      }
       if (exportMode() !== 'off') exportCurrent('end');
     }
     /* Продолжить сохранённый забег: игра пересоздаётся и встаёт на паузу. Хвост записи после сохранения уходит в lost. */
-    function continueGame(sv) {
-      var m = sv.rec ? lsJson(runKey(sv.rec.head.id, 'h')) : null, stored = sv.rec ? readRun(sv.rec.head.id) : null;
-      newGame(sv, stored);
+    function continueGame(sv, manual) {
+      flushRec();
+      var m = !manual && sv.rec ? lsJson(runKey(sv.rec.head.id, 'h')) : null;
+      var stored = manual ? sv.history : (sv.rec ? readRun(sv.rec.head.id) : null);
+      if (!newGame(sv, stored, manual)) return false;
       if (sv.rec && m && m.chunks) for (var c = Math.floor(sv.rec.n / RD.chunk) + 1; c < m.chunks; c++) lsDel(runKey(sv.rec.head.id, 'c' + c));
-      store.flushed = Math.min(game.rec ? game.rec.events.length : 0, Math.floor((sv.rec ? sv.rec.n : 0) / RD.chunk) * RD.chunk);
+      if (!manual) store.flushed = Math.min(game.rec ? game.rec.events.length : 0, Math.floor((sv.rec ? sv.rec.n : 0) / RD.chunk) * RD.chunk);
       started = true;
       elStart.classList.add('hidden');
       flushRec();
       game.note('saveLoaded');
       setPaused(true, 'load');
       render();
+      return true;
     }
+
+    var slotModal = $('save-modal'), slotList = $('save-list'), slotStatus = $('save-status');
+    var slotMode = '', slotOpener = null, slotWasRunning = false, slotConfirm = null;
+    function openSlots(mode, opener) {
+      if (slotMode || (mode === 'save' && (!started || game.state.over))) return;
+      slotMode = mode; slotOpener = opener; slotConfirm = null;
+      slotWasRunning = started && !game.state.over && !paused;
+      if (slotWasRunning) setPaused(true, 'slots');
+      if (started && Object.keys(keysDown).length) { keysDown = {}; game.setMoveDir(0, 0); }
+      $('save-title').textContent = mode === 'save' ? 'Сохранить игру' : 'Загрузить игру';
+      slotStatus.textContent = '';
+      slotModal.classList.remove('hidden');
+      drawSlots();
+      (slotList.querySelector('button:not(:disabled)') || $('save-close')).focus();
+    }
+    function closeSlots(loaded) {
+      slotModal.classList.add('hidden');
+      slotMode = ''; slotConfirm = null;
+      if (slotWasRunning && !loaded && !document.hidden && !awayPaused) setPaused(false, 'slots');
+      slotWasRunning = false;
+      (loaded ? elPauseBtn : slotOpener).focus();
+      slotOpener = null;
+    }
+    function drawSlots() {
+      slotList.textContent = '';
+      var ids = slotMode === 'load' ? ['auto'] : [], any = false, errors = false;
+      for (var i = 1; i <= D.save.manualSlots; i++) ids.push(String(i));
+      ids.forEach(function (id) {
+        var entry = readSlot(id), b = document.createElement('button'), sv = entry.save;
+        b.type = 'button'; b.className = 'save-slot'; b.dataset.slot = id;
+        var detail = entry.error || 'Пусто';
+        if (sv) {
+          any = true;
+          detail = 'Сутки ' + sv.day + ', ' + sv.hour + ' · ' + new Date(sv.savedAt).toLocaleString('ru-RU', {day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit'});
+        }
+        if (entry.error) errors = true;
+        b.textContent = slotName(id) + ' — ' + detail;
+        b.disabled = !!entry.blocked || (slotMode === 'load' && !sv);
+        slotList.appendChild(b);
+      });
+      if (slotMode === 'load' && !any) slotStatus.textContent = errors ? 'Доступных сохранений нет.' : 'Сохранений пока нет.';
+    }
+    function chooseSlot(id) {
+      var entry = readSlot(id), sv = entry.save, saving = slotMode === 'save';
+      if (entry.blocked || (!saving && !sv)) { drawSlots(); slotStatus.textContent = entry.error || 'Ячейка пуста.'; return; }
+      // Привязываем согласие к снимку: если другая вкладка успела сохранить, подтверждение понадобится заново.
+      var revision = sv ? sv.savedAt : entry.error;
+      if ((saving ? sv || entry.error : started && !game.state.over) &&
+          (!slotConfirm || slotConfirm.id !== id || slotConfirm.revision !== revision)) {
+        slotConfirm = { id: id, revision: revision };
+        slotStatus.textContent = saving ? 'Ещё раз нажмите «' + slotName(id) + '», чтобы заменить сохранение.' :
+          'Текущий прогресс после сохранения будет потерян. Нажмите «' + slotName(id) + '» ещё раз, чтобы загрузить.';
+        return;
+      }
+      slotConfirm = null;
+      if (!saving) {
+        if (continueGame(sv, id !== 'auto')) closeSlots(true);
+        else slotStatus.textContent = 'Не удалось прочитать состояние игры.';
+        return;
+      }
+      var snapshot = game.saveState();
+      if (game.rec) snapshot.history = { events: game.rec.events, lost: game.rec.lost };
+      if (!lsSet(slotKey(id), JSON.stringify(snapshot))) {
+        slotStatus.textContent = 'Не удалось сохранить игру. Проверьте свободное место и доступ к хранилищу браузера.';
+        return;
+      }
+      flushRec();
+      drawSlots();
+      slotStatus.textContent = 'Игра сохранена. ' + slotName(id) + '.';
+      slotList.querySelector('[data-slot="' + id + '"]').focus();
+    }
+    $('manual-save-btn').addEventListener('click', function () { openSlots('save', this); });
+    $('manual-load-btn').addEventListener('click', function () { openSlots('load', this); });
+    $('end-load-btn').addEventListener('click', function () { openSlots('load', this); });
+    $('save-close').addEventListener('click', function () { closeSlots(false); });
+    slotList.addEventListener('click', function (e) {
+      var b = e.target.closest('button[data-slot]');
+      if (b && !b.disabled) chooseSlot(b.dataset.slot);
+    });
+    slotModal.addEventListener('click', function (e) { if (e.target === slotModal) closeSlots(false); });
+    document.addEventListener('keydown', function (e) {
+      if (!slotMode) return;
+      if (e.key === 'Escape') { e.preventDefault(); closeSlots(false); }
+      else if (e.key === 'Tab') {
+        var buttons = slotModal.querySelectorAll('button:not(:disabled)'), first = buttons[0], last = buttons[buttons.length - 1];
+        if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+        else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+      }
+      e.stopImmediatePropagation();
+    }, true);
 
     /* ---------- окно «Записи» ---------- */
     var elRec = $('rec-screen'), recPaused = false;

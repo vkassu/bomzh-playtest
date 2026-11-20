@@ -745,3 +745,63 @@ body { background: #0b0f14; }
 #goals .goal-den .pip { width: 8px; height: 8px; }
 #goals .goal.ready .goal-progress { color: #7a2a24; font-weight: 700; }
 #goals { padding: 3px 14px 4px; }
+/* Нарисованный двор: размеры зон включают объект на иллюстрации и подпись у его основания. */
+.painted-courtyard .place {
+  left: var(--object-x) !important; top: var(--object-y) !important;
+  width: var(--object-w); height: var(--object-h); transform: none;
+  justify-content: flex-end; gap: 1px; border: 0; outline: 0;
+}
+.painted-courtyard .place-entrance { --object-x:39.4%; --object-y:8%; --object-w:11.6%; --object-h:25%; }
+.painted-courtyard .place-bench    { --object-x:53.6%; --object-y:19.4%; --object-w:8%; --object-h:14.6%; }
+.painted-courtyard .place-bin      { --object-x:86.9%; --object-y:14.2%; --object-w:9%; --object-h:21.5%; }
+.painted-courtyard .place-pipe     { --object-x:4.3%; --object-y:33.7%; --object-w:8.4%; --object-h:21.3%; }
+.painted-courtyard .place-den      { --object-x:4%; --object-y:63.7%; --object-w:9.4%; --object-h:14.7%; }
+.painted-courtyard .place-stall    { --object-x:44.1%; --object-y:33.4%; --object-w:18.8%; --object-h:23.4%; }
+.painted-courtyard .place-kiosk    { --object-x:21.65%; --object-y:57.4%; --object-w:12.7%; --object-h:27.1%; }
+.painted-courtyard .place-recycle  { --object-x:66.9%; --object-y:58.2%; --object-w:14%; --object-h:26.5%; }
+.painted-courtyard .place .place-emoji, .painted-courtyard #bus-stop { visibility: hidden; position: absolute; }
+.painted-courtyard .place .place-label, .painted-courtyard .place .place-sub {
+  position: relative; inset: auto; width: max-content; max-width: min(14rem, 180%);
+  margin: 0; padding: 2px 6px; line-height: 1.1; border-radius: 2px;
+  color: #f3ecdf; background: rgba(23,29,29,.86); text-shadow: 0 1px 2px #151310;
+  white-space: nowrap;
+}
+.painted-courtyard .place .place-label { font-size: clamp(10px, .84vw, 13px); letter-spacing: .015em; }
+.painted-courtyard .place .place-sub { font-size: clamp(9px, .73vw, 11px); }
+.painted-courtyard .place-sub:empty { display: none; }
+.painted-courtyard .place.closed { filter: none; }
+.painted-courtyard .place.closed .place-sub { background: #673c33; }
+.painted-courtyard .place.near { box-shadow: none !important; }
+.painted-courtyard .place.near .place-label, .painted-courtyard .place-den.ready .place-sub {
+  background: #805928; color: #fff3d8;
+}
+.painted-courtyard .place::before { content: ''; position: absolute; pointer-events: none; }
+.painted-courtyard .place-den::before {
+  left: 12%; top: 17%; width: 58%; height: 32%; background-position: center; background-size: 100% 100%;
+  background-repeat: no-repeat;
+}
+.painted-courtyard .place-entrance.door-open::before {
+  left: 42%; top: 30%; width: 27%; height: 43%;
+  background: linear-gradient(90deg, #3e3229 0 15%, #8c704d 23%, #e1bd81 57%, #694e33 62%, #513f31 93%);
+  box-shadow: 0 0 8px rgba(255,194,99,.45);
+}
+.painted-courtyard .place-kiosk.closed::before, .painted-courtyard .place-recycle.closed::before {
+  background: repeating-linear-gradient(#615e52 0 3px, #414341 4px, #777265 5px); box-shadow: inset 0 0 5px #303331;
+}
+.painted-courtyard .place-kiosk.closed::before { left: 14%; top: 28%; width: 59%; height: 31%; }
+.painted-courtyard .place-recycle.closed::before { left: 32%; top: 29%; width: 27%; height: 31%; }
+.painted-courtyard .place-stall.closed::before {
+  left: 9%; top: 19%; width: 79%; height: 52%;
+  clip-path: polygon(3% 0, 96% 0, 100% 94%, 89% 98%, 78% 92%, 65% 99%, 50% 92%, 36% 99%, 25% 93%, 14% 99%, 0 95%);
+  background: repeating-linear-gradient(82deg, #615e51 0%, #77705d 8%, #59584d 11%, #726c58 18%);
+}
+.painted-courtyard .tile.hero, .painted-courtyard .tile.npc {
+  margin-top: -18px; /* координата актёра обозначает место, на котором он стоит */
+}
+.painted-courtyard #art-bg { transition: filter 2s ease-out; }
+#game:has(#clock[data-rhythm="morning"]) .painted-courtyard:not(.night) #art-bg {
+  filter: sepia(.13) saturate(.91) brightness(1.04);
+}
+#game:has(#clock[data-rhythm="evening"], #clock[data-rhythm="late"]) .painted-courtyard:not(.night) #art-bg {
+  filter: sepia(.22) saturate(1.09) brightness(.85);
+}

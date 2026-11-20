@@ -5,7 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <title>Бомж v0.1</title>
 <link rel="stylesheet" href="style.css?v=20261120b">
-<link rel="stylesheet" href="art.css?v=20261120b">
+<link rel="stylesheet" href="art.css?v=024">
+<link rel="stylesheet" href="menu.css?v=024">
 </head>
 <body>
 <div id="game">
@@ -42,6 +43,8 @@
       <button id="sound-btn" type="button" aria-label="Звук: вкл/выкл (M)" title="Звук: вкл/выкл (M)">🔊</button>
       <input id="sound-vol" type="range" min="0" max="100" step="1" aria-label="Громкость">
       <button id="rec-btn" type="button"></button>
+      <button class="hud-file-btn" id="manual-save-btn" type="button" aria-label="Сохранить игру" title="Сохранить игру"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h13l3 3v13H4z"/><path d="M8 4v6h8V4M8 20v-6h8v6"/></svg></button>
+      <button class="hud-file-btn" id="manual-load-btn" type="button" aria-label="Загрузить игру" title="Загрузить игру"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 18V6h6l2 2h9v3"/><path d="M3 19l3-7h16l-3 7z"/></svg></button>
     </div>
     <div id="speed-panel">
       <button id="pause-btn" type="button" aria-label="Пауза">⏸</button>
@@ -91,16 +94,46 @@
   </div>
   <div id="pause-banner" class="hidden"><span id="pause-title">Пауза</span><span id="pause-note" class="hidden"></span></div>
 
-  <div id="start-screen">
+  <div id="start-screen" aria-labelledby="start-title" role="region">
     <div id="start-card">
-      <h1 id="start-title"></h1>
-      <div id="start-intro"></div>
-      <h2 id="start-how-title"></h2>
-      <ul id="start-how"></ul>
-      <div id="start-btns"><button id="start-btn" type="button"></button><button id="continue-btn" type="button" class="hidden"></button></div>
-      <div id="start-stale" class="hidden"></div>
-      <div id="start-note"></div>
-      <button id="start-rec-btn" type="button" class="rec-link"></button>
+      <h1 id="start-title">Бомж</h1>
+      <div id="start-btns">
+        <button id="start-btn" type="button">Начать новую игру</button>
+        <button id="continue-btn" type="button">Загрузиться</button>
+        <button id="menu-about-btn" type="button">О разработчиках</button>
+        <button id="menu-exit-btn" type="button">Выход</button>
+      </div>
+      <div id="start-stale" class="hidden" role="status"></div>
+      <div class="menu-tools">
+        <button id="menu-help-btn" type="button">Как играть</button>
+        <button id="start-rec-btn" type="button" class="rec-link">Записи</button>
+      </div>
+    </div>
+    <dialog id="menu-info-dialog" aria-labelledby="menu-info-title">
+      <h2 id="menu-info-title"></h2>
+      <section id="menu-help" hidden>
+        <div id="start-intro"></div>
+        <h3 id="start-how-title"></h3>
+        <ul id="start-how"></ul>
+        <div id="start-note"></div>
+      </section>
+      <section id="menu-about" hidden>
+        <p>Автор игры и геймдизайнер — Алексей.</p>
+        <p>В разработке помогали Claude и Codex.</p>
+      </section>
+      <section id="menu-exit" hidden>
+        <p>Чтобы выйти из игры, закрой эту вкладку браузера.</p>
+      </section>
+      <button id="menu-info-close" type="button">В меню</button>
+    </dialog>
+  </div>
+
+  <div id="save-modal" class="hidden" role="dialog" aria-modal="true" aria-labelledby="save-title">
+    <div id="save-panel">
+      <h2 id="save-title" tabindex="-1">Сохранения</h2>
+      <div id="save-list"></div>
+      <p id="save-status" role="status" aria-live="polite"></p>
+      <button id="save-close" type="button">Назад</button>
     </div>
   </div>
 
@@ -110,6 +143,7 @@
       <p id="end-cause"></p>
       <p id="end-lived"></p>
       <button id="restart-btn" type="button">Ещё раз</button>
+      <button id="end-load-btn" type="button">Загрузиться</button>
       <button id="end-rec-btn" type="button" class="rec-link"></button>
     </div>
   </div>
@@ -134,9 +168,10 @@
   </div>
 
 </div>
-<script src="data.js?v=20261120b"></script>
-<script src="game.js?v=20261120b"></script>
+<script src="data.js?v=023"></script>
+<script src="game.js?v=023"></script>
 <script src="sound.js?v=20261120b"></script>
-<script src="art.js?v=20261120c"></script>
+<script src="art.js?v=024"></script>
+<script src="menu.js?v=023"></script>
 </body>
 </html>
