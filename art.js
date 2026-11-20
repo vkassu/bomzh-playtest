@@ -477,7 +477,7 @@
     '<path d="M13 48h5" stroke="#12161a" stroke-width="1.6" stroke-linecap="round"/>' +
     '<circle cx="12" cy="51" r="2" fill="#c9624e"/>'); },
 
-    /* встречные, 64x64 (собака смотрит влево) */
+    /* встречные, 64x64 */
     /* прохожие: тип узнаётся по силуэту — студент узкий с рюкзаком, работяга широкий в ушанке, пальто длинное со шляпой */
     'npc:student': function () { return svg(64, 64,
       sh(32, 59, 14, 3.5) +
@@ -597,18 +597,6 @@
       '<path d="M22 17.5h20l3 3.5H19z" fill="#12161a"/>' +
       '<circle cx="32" cy="9.5" r="1.8" fill="#c9b458"/>' +
       '<path d="M28 24h8" stroke="#12161a" stroke-width="1.5"/>'); },
-    'npc:dog': function () { return svg(64, 64,
-      sh(32, 57, 22, 4) +
-      '<path d="M49 37q11-4 8-16" fill="none" stroke="#12161a" stroke-width="6.5" stroke-linecap="round"/>' +
-      '<path d="M49 37q11-4 8-16" fill="none" stroke="#8a6d4e" stroke-width="3.5" stroke-linecap="round"/>' +
-      '<path d="M22 46v11h5V46M27 46v9h4v-9M40 46v11h5V46M45 46v9h4v-9" fill="#7a5f43"' + O + '/>' +
-      '<path d="M18 33q15-8 31 0q4 7 0 14H22q-6-5-4-14z" fill="#8a6d4e"' + O + '/>' +
-      '<path d="M30 33q8-3 13 2q-6 5-13-2z" fill="#5c4732"/>' +
-      '<path d="M5 30q2-11 13-9l5 9q-2 9-11 9q-7-2-7-9z" fill="#8a6d4e"' + O + '/>' +
-      '<path d="M14 22l4-9 5 10z" fill="#5c4732"' + O + '/>' +
-      '<circle cx="6.5" cy="31" r="2.2" fill="#12161a"/><circle cx="13" cy="27.5" r="1.3" fill="#12161a"/>' +
-      '<path d="M8 36q3 2 6 0" fill="none" stroke="#12161a" stroke-width="1.3"/>'); },
-
     /* автобус, 220x80, едет вправо; окна тёмные, без пассажиров. Тёплые только фары */
     'bus': function () { return svg(220, 80,
       sh(110, 73, 100, 5) +
@@ -750,20 +738,34 @@
    * ===================================================================== */
   var field, bg, fx, bc, fc, frostCv = null, W = 0, H = 0, raf = 0, lastT = 0;
   var courtyard = null;
-  var walkAtlasReady = false, gait = null;
+  var walkAtlasReady = false, npcAtlasReady = false;
+  var actorGaits = new WeakMap();
+  // Порядок трёхракурсных полос в npc-walk.webp. Последняя строка — бабушка на лавке.
+  var npcBodies = [
+    ['student', .97], ['worker', 1.02], ['coat', 1.08], ['fat', 1],
+    ['drunk', .94], ['granny', .86], ['cop', 1.05]
+  ];
 
-  function drawHeroGait(el, now) {
-    if (!el || !walkAtlasReady) return;
+  function drawActorGait(el, now, hero) {
+    if (!el || !(hero ? walkAtlasReady : npcAtlasReady)) return;
     var x = parseFloat(el.style.left) / W, y = parseFloat(el.style.top) / H;
     if (!isFinite(x) || !isFinite(y)) return;
-    if (!gait || gait.el !== el) gait = { el: el, x: x, y: y, facing: 'front', phase: 0, movedAt: -1000 };
+    var gait = actorGaits.get(el);
+    if (!gait) {
+      var type = hero ? -1 : npcBodies.findIndex(function (body) { return el.classList.contains('npc-' + body[0]); });
+      if (!hero && type < 0) return;
+      gait = { x: x, y: y, facing: 'front', phase: 0, movedAt: -1000, type: type };
+      actorGaits.set(el, gait);
+      el.classList.add(hero ? 'hero-atlas' : 'npc-atlas');
+    }
     // У двери 96 пикселей высоты. У остановки сиденье в 29 пикселях над землёй.
     var depth = Math.max(0, Math.min(1.2, (y - 0.265) / 0.599));
-    var bodyH = (82 + depth * 31) * H / 870;
+    var bodyH = (82 + depth * 31) * H / 870 * (hero ? 1 : npcBodies[gait.type][1]);
     var cellH = bodyH * 160 / 146;
     var dx = (x - gait.x) * W, dy = (y - gait.y) * H, distance = Math.hypot(dx, dy);
-    var awake = !el.classList.contains('asleep');
-    var walking = awake && el.classList.contains('walking');
+    var sitting = !hero && el.classList.contains('sitting');
+    var walking = !sitting && !el.classList.contains('asleep') && !el.classList.contains('talking') &&
+      (el.classList.contains('walking') || el.classList.contains('npc-cop'));
     if (walking && distance > 0.03 && distance < bodyH * 1.15) {
       // Выбираем ракурс по игровому направлению независимо от пропорций окна.
       var sx = (x - gait.x) * window.GAME_DATA.layout.logicalAspect, sy = y - gait.y;
@@ -776,10 +778,13 @@
     var frame = walking && now - gait.movedAt < 120 ? 1 + Math.floor(gait.phase * 4) : 0;
     if (el.dataset.gaitPaused === 'true') frame = Number(el.dataset.gaitFrame || 0);
     var row = gait.facing === 'front' ? 0 : gait.facing === 'back' ? 1 : 2;
-    el.classList.add('hero-atlas');
-    if (el.dataset.facing !== gait.facing) {
-      el.dataset.facing = gait.facing;
-      el.style.setProperty('--gait-row', (row * 50) + '%');
+    if (sitting) row = 21;
+    else if (!hero) row += gait.type * 3;
+    var facing = sitting ? 'front' : gait.facing;
+    if (el.dataset.facing !== facing) el.dataset.facing = facing;
+    if (gait.row !== row) {
+      gait.row = row;
+      el.style.setProperty('--gait-row', (row * (hero ? 50 : 100 / 21)) + '%');
     }
     if (el.dataset.gaitFrame !== String(frame)) {
       el.dataset.gaitFrame = String(frame);
@@ -787,7 +792,7 @@
     }
     if (gait.bodyH !== bodyH) {
       gait.bodyH = bodyH;
-      el.style.setProperty('--hero-height', bodyH.toFixed(2) + 'px');
+      el.style.setProperty(hero ? '--hero-height' : '--npc-height', bodyH.toFixed(2) + 'px');
       el.style.setProperty('--cell-height', cellH.toFixed(2) + 'px');
     }
   }
@@ -1434,7 +1439,9 @@
     if (el) { p = centerOf(el, fr); lights.push({ x: p.x, y: p.y, r: 124, a: 0.45, w: 0 }); }
     /* герой виден всегда; предметы и встречные на земле различимы */
     var heroEl = document.querySelector('.tile.hero');
-    drawHeroGait(heroEl, t);
+    drawActorGait(heroEl, t, true);
+    var people = tiles.querySelectorAll('.walker:not(.gone), .npc-cop:not(.gone)');
+    for (i = 0; i < people.length; i++) drawActorGait(people[i], t, false);
     if (heroEl) { p = centerOf(heroEl, fr); lights.push({ x: p.x, y: p.y, r: 104, a: 0.62, w: 0.03 }); }
     /* прохожие: своё слабое пятно света, как у героя, но меньше — ночью их видно и типы различимы */
     var walkers = document.querySelectorAll('.tile.walker:not(.gone)');
@@ -1648,6 +1655,9 @@
     };
     atlas.onerror = plate.onerror = function () { field.classList.add('walk-art-unavailable'); };
     atlas.src = 'hero-walk.webp?v=029';
+    var npcAtlas = new Image();
+    npcAtlas.onload = function () { npcAtlasReady = npcAtlas.naturalWidth === 640 && npcAtlas.naturalHeight === 3520; };
+    npcAtlas.src = 'npc-walk.webp';
     plate.onload = function () {
       courtyard = plate;
       if (W && H) drawBg();

@@ -6,7 +6,7 @@
 <title>Бомж v0.1</title>
 <script>if (new URLSearchParams(location.search).get('walktest') === '1') document.documentElement.classList.add('walk-preview');</script>
 <link rel="stylesheet" href="style.css?v=20261120b">
-<link rel="stylesheet" href="art.css?v=029">
+<link rel="stylesheet" href="art.css?v=031">
 <link rel="stylesheet" href="menu.css?v=029">
 <link rel="stylesheet" href="kiosk.css?v=030b">
 </head>
@@ -122,7 +122,7 @@
       </section>
       <section id="menu-about" hidden>
         <p>Автор игры и геймдизайнер — Алексей.</p>
-        <p>В разработке помогали Claude и Codex.</p>
+        <p>Разработка с помощью ИИ.</p>
       </section>
       <section id="menu-exit" hidden>
         <p>Чтобы выйти из игры, закрой эту вкладку браузера.</p>
@@ -134,8 +134,8 @@
   <section id="walk-controls" aria-label="Проверка походки">
     <strong id="walk-stage" aria-live="polite">У остановки</strong>
     <div role="group" aria-label="Темп ходьбы">
-      <button id="walk-normal" type="button" aria-pressed="true">Обычный ×1</button>
-      <button id="walk-slow" type="button" aria-pressed="false">Спокойный ×0,65</button>
+      <button id="walk-normal" type="button" aria-pressed="false">Быстрый ×1</button>
+      <button id="walk-slow" type="button" aria-pressed="true">Спокойный ×0,65</button>
     </div>
     <button id="walk-pause" type="button">Пауза</button>
     <button id="walk-repeat" type="button">Повторить</button>
@@ -182,11 +182,11 @@
   </div>
 
 </div>
-<script src="data.js?v=023"></script>
-<script src="game.js?v=029"></script>
+<script src="data.js?v=031"></script>
+<script src="game.js?v=031"></script>
 <script src="sound.js?v=029"></script>
-<script src="art.js?v=029"></script>
+<script src="art.js?v=031"></script>
 <script src="menu.js?v=029"></script>
-<script src="walktest.js?v=029"></script>
+<script src="walktest.js?v=031"></script>
 </body>
 </html>

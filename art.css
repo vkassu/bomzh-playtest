@@ -824,6 +824,33 @@ body { background: #0b0f14; }
   animation: none; transform: translateX(-50%); transform-origin: center;
 }
 #field .tile.hero.hero-atlas[data-facing="left"]:not(.asleep) .tile-emoji { transform: translateX(-50%) scaleX(-1); }
+#field .tile.npc-atlas {
+  width: calc(var(--npc-height) * .60); height: var(--npc-height);
+  transform: translate(-50%, -100%); margin-top: 0;
+}
+#field .tile.npc-atlas.sitting {
+  height: calc(var(--npc-height) * .72);
+  margin-top: calc(var(--npc-height) * -.13);
+}
+#field .tile.npc-atlas .tile-emoji {
+  position: absolute; left: 50%; bottom: calc(var(--cell-height) * -.04375);
+  width: calc(var(--cell-height) * .8); height: var(--cell-height);
+  background-image: url("npc-walk.webp") !important;
+  background-size: 500% 2200%; background-position: var(--gait-col) var(--gait-row);
+  animation: none; transform: translateX(-50%);
+}
+#field .tile.npc-atlas[data-facing="left"] .tile-emoji { transform: translateX(-50%) scaleX(-1); }
+#field .tile.npc-atlas .tile-label { position: absolute; top: 100%; }
+#field .tile.npc-atlas .catch-ring {
+  top: auto; bottom: -3%; width: 85%; height: 13%; left: 7.5%; margin-left: 0;
+}
+#field .tile.npc-atlas .catch-ring::after {
+  width: 116%; margin-left: 0; left: -8%; transform: translateY(-50%) rotate(-24deg);
+}
+#field .tile.npc-atlas .trash-bag {
+  top: 54%; left: 67%; width: calc(var(--npc-height) * .22); height: calc(var(--npc-height) * .26);
+}
+#field .tile.npc-atlas[data-facing="left"] .trash-bag { left: -3%; }
 #field .tile.hero.hero-atlas:not(.asleep) .tile-label { position: absolute; top: calc(100% + 2px); }
 #field.painted-courtyard:has(#stash:not(.hidden)) .tile.hero.hero-atlas:not(.asleep) .tile-label { top: auto; }
 .painted-courtyard :is(#art-bg, #art-posts, .furniture-front) { transition: filter 2s ease-out; }

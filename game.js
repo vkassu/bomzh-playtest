@@ -18,6 +18,7 @@
     return f;
   }
 
+  var courtyardGraph; // Один неизменный граф на все забеги и симуляции ботов.
   function createGame(opts) {
     opts = opts || {};
     var rng = opts.rng || makeRng((Math.random() * 4294967296) >>> 0);   // в браузере — свой генератор с состоянием; тесты и боты дают свой
@@ -53,8 +54,8 @@
     /* ---------- телеметрия: только считает, на логику и rng не влияет ---------- */
     function newTele() {
       return {
-        copKicks: 0, evictions: 0, entranceLocked: 0, entranceCop: 0, dogCome: 0, dogAte: 0,
-        followIn: 0, doorSlammed: 0, doorIn: 0, doorOut: 0, busStops: 0, busPass: 0, busAlight: 0, fullDrops: 0, fullDropsFood: 0, dogAteDropped: 0,
+        copKicks: 0, evictions: 0, entranceLocked: 0, entranceCop: 0,
+        followIn: 0, doorSlammed: 0, doorIn: 0, doorOut: 0, busStops: 0, busPass: 0, busAlight: 0, fullDrops: 0, fullDropsFood: 0,
         fires: 0, cardboardFed: 0, vodka: 0, shawarma: 0, scrapsEaten: 0, scrapsBad: 0,
         buys: {}, soldN: 0, soldMoney: 0, finds: {}, emptyTries: 0,
         spentGear: 0, spentFood: 0, spentOther: 0, used: {}, wears: 0, unwears: 0, papersRead: 0, paperFed: 0, gearDay: [],
@@ -665,11 +666,16 @@
     }
 
     /* ---------- геометрия ---------- */
-    function clampPos(x, y) {
+    function boundedPos(x, y) {
+      var mx = Math.min(.035, L.fieldMarginPx / field.w), my = Math.min(.06,L.fieldMarginPx / field.h);
       return {
-        x: clamp(x, L.fieldMarginPx / field.w, 1 - L.fieldMarginPx / field.w),
-        y: clamp(y, L.fieldTopMarginPx / field.h, 1 - L.fieldMarginPx / field.h)
+        x: clamp(x, mx, 1 - mx),
+        y: clamp(y, navTop, 1 - my)
       };
+    }
+    function clampPos(x,y) {
+      var p = boundedPos(x,y);
+      return projectGround(p.x,p.y);
     }
     function distPx(ax, ay, bx, by) {
       var dx = (ax - bx) * field.w, dy = (ay - by) * field.h;
@@ -685,7 +691,7 @@
           var py = cy * field.h + Math.sin(ang) * L.lootRingRadiiPx[r];
           if (px < L.fieldMarginPx || px > field.w - L.fieldMarginPx) continue;
           if (py < L.fieldTopMarginPx || py > field.h - L.fieldMarginPx) continue;
-          var x = px / field.w, y = py / field.h, ok = true, i;
+          var x = px / field.w, y = py / field.h, ok = walkable(x,y), i;
           for (i = 0; i < S.items.length && ok; i++) {
             if (distPx(x, y, S.items[i].x, S.items[i].y) < L.itemSpacingPx) ok = false;
           }
@@ -716,7 +722,8 @@
       if (i >= 0) S.npcs.splice(i, 1);
     }
     function spawnItemAt(type, x, y) {
-      var it = { id: nextId++, type: type, x: x, y: y, locked: false, held: false };
+      var pos = clampPos(x,y);
+      var it = { id: nextId++, type: type, x: pos.x, y: pos.y, locked: false, held: false };
       if (type === 'fire') { it.timeLeft = D.fire.burnSeconds; it.feedQueue = 0; it.feedT = 0; it.feedList = []; }
       S.items.push(it);
       return it;
@@ -808,6 +815,139 @@
       return S.hero.energy < D.hero.tiredThreshold ? D.hero.tiredTaskMultiplier : 1;
     }
 
+    /* Навигация по точке опоры. Касание ребра разрешено, пересечение внутренности — нет. */
+    var blocks = D.navigation.blocks, navTop = D.navigation.top, navEps = 1e-10;
+    function walkable(x, y) {
+      if (y < navTop - navEps) return false;
+      for (var i = 0; i < blocks.length; i++) {
+        var b = blocks[i];
+        if (x > b.left + navEps && x < b.right - navEps && y > b.top + navEps && y < b.bottom - navEps) return false;
+      }
+      return true;
+    }
+    function projectGround(x, y) {
+      y = Math.max(navTop, y);
+      if (walkable(x, y)) return { x: x, y: y };
+      for (var i = 0; i < blocks.length; i++) {
+        var b = blocks[i];
+        if (x <= b.left || x >= b.right || y <= b.top || y >= b.bottom) continue;
+        var options = [{ x: b.left, y: y }, { x: b.right, y: y }, { x: x, y: b.bottom }];
+        if (b.top >= navTop) options.push({ x: x, y: b.top });
+        return options.reduce(function (best, p) {
+          return dist(x,y,p.x,p.y) < dist(x,y,best.x,best.y) ? p : best;
+        });
+      }
+      return { x: x, y: y };
+    }
+    // Время входа во внутренность прямоугольника. Прямая вдоль края и касание единственного угла допустимы.
+    function firstContact(x, y, tx, ty) {
+      var dx = tx - x, dy = ty - y, hit = 1;
+      for (var i = 0; i < blocks.length; i++) {
+        var b = blocks[i];
+        if (Math.max(x,tx) <= b.left + navEps || Math.min(x,tx) >= b.right - navEps ||
+            Math.max(y,ty) <= b.top + navEps || Math.min(y,ty) >= b.bottom - navEps) continue;
+        var loX = dx ? ((dx > 0 ? b.left : b.right) - x) / dx : -Infinity;
+        var hiX = dx ? ((dx > 0 ? b.right : b.left) - x) / dx : Infinity;
+        var loY = dy ? ((dy > 0 ? b.top : b.bottom) - y) / dy : -Infinity;
+        var hiY = dy ? ((dy > 0 ? b.bottom : b.top) - y) / dy : Infinity;
+        var enter = Math.max(0,loX,loY), leave = Math.min(1,hiX,hiY);
+        if (enter + navEps < leave && enter < hit) hit = enter;
+      }
+      return hit;
+    }
+    function canWalk(x,y,tx,ty) {
+      return y >= navTop - navEps && ty >= navTop - navEps && firstContact(x,y,tx,ty) === 1;
+    }
+    function slideWalk(h, tx, ty) {
+      var dx = tx-h.x, dy = ty-h.y, t = firstContact(h.x,h.y,tx,ty);
+      if (t === 1) return {x:tx, y:ty};
+      var x = h.x + t*dx, y = h.y + t*dy;
+      if (dx && canWalk(x,y,tx,y)) x = tx;
+      if (dy) y += (ty-y) * firstContact(x,y,x,ty);
+      return {x:x,y:y};
+    }
+    function makeGraph() {
+      var nodes = [], costs = [], next = [], i, j, k;
+      blocks.forEach(function (b) {
+        [b.left,b.right].forEach(function (x) {
+          [Math.max(b.top,navTop), b.bottom].forEach(function (y) { nodes.push({x:x,y:y}); });
+        });
+      });
+      for (i = 0; i < nodes.length; i++) {
+        var a = nodes[i]; costs[i] = []; next[i] = [];
+        for (j = 0; j < nodes.length; j++) {
+          var b = nodes[j];
+          costs[i][j] = canWalk(a.x,a.y,b.x,b.y) ? dist(a.x,a.y,b.x,b.y) : Infinity;
+          next[i][j] = j;
+        }
+      }
+      for (k = 0; k < nodes.length; k++) for (i = 0; i < nodes.length; i++) for (j = 0; j < nodes.length; j++) {
+        var via = costs[i][k] + costs[k][j];
+        if (via + navEps < costs[i][j]) { costs[i][j] = via; next[i][j] = next[i][k]; }
+      }
+      return {nodes:nodes, costs:costs, next:next};
+    }
+    var navSource;
+    function fromGround(x, y) {
+      if (navSource && navSource.x === x && navSource.y === y) return navSource;
+      var graph = courtyardGraph || (courtyardGraph = makeGraph()), nodes = graph.nodes;
+      var lens = nodes.map(function () { return Infinity; }), starts = [];
+      nodes.forEach(function (a,i) {
+        if (!canWalk(x,y,a.x,a.y)) return;
+        var edge = dist(x,y,a.x,a.y);
+        for (var j = 0; j < nodes.length; j++) {
+          var cost = edge + graph.costs[i][j];
+          if (cost < lens[j] - navEps) { lens[j] = cost; starts[j] = i; }
+        }
+      });
+      navSource = {x:x,y:y,lens:lens,starts:starts};
+      return navSource;
+    }
+    function groundRoute(x,y,tx,ty,points) {
+      if (canWalk(x,y,tx,ty)) return points ? [{x:tx,y:ty}] : dist(x,y,tx,ty);
+      var src = fromGround(x,y), g = courtyardGraph, best = Infinity, end = -1;
+      for (var j = 0; j < g.nodes.length; j++) {
+        var a = g.nodes[j], d = src.lens[j] + dist(a.x,a.y,tx,ty);
+        if (d < best - navEps && canWalk(a.x,a.y,tx,ty)) { best = d; end = j; }
+      }
+      if (!points) return best;
+      var path = [];
+      if (end < 0) return path;
+      var idx = src.starts[end];
+      for (;;) {
+        a = g.nodes[idx];
+        if (dist(x,y,a.x,a.y) > navEps) path.push(a);
+        if (idx === end) break;
+        idx = g.next[idx][end];
+      }
+      path.push({x:tx,y:ty});
+      return path;
+    }
+    function walkDistance(x,y,tx,ty) { return groundRoute(x,y,tx,ty,false); }
+    // Производные углы пути не входят в сохранение: после загрузки пересчитываются от текущего положения.
+    var routes = new WeakMap();
+    function moveOnGround(actor, tx, ty, step) {
+      var path = routes.get(actor);
+      if (!path || path.tx !== tx || path.ty !== ty || path.x !== actor.x || path.y !== actor.y) {
+        path = { tx:tx, ty:ty, points:groundRoute(actor.x,actor.y,tx,ty,true), index:0 };
+        routes.set(actor,path);
+      }
+      var moved = 0;
+      while (path.index < path.points.length) {
+        var p = path.points[path.index], dx = p.x-actor.x, d = dist(actor.x,actor.y,p.x,p.y);
+        if (step > 0 && Math.abs(dx) > .002) actor.dir = dx < 0 ? -1 : 1;
+        if (d > step) {
+          actor.x += dx * step/d; actor.y += (p.y-actor.y)*step/d; moved += step;
+          break;
+        }
+        actor.x = p.x; actor.y = p.y; moved += d; step -= d; path.index++;
+        // Показываем сам угол хотя бы один кадр: между двумя соседними позами тоже свободный отрезок.
+        if (d > navEps) break;
+      }
+      path.x = actor.x; path.y = actor.y;
+      return {arrived:actor.x === tx && actor.y === ty, moved:moved};
+    }
+
     /* ---------- дела героя ---------- */
     /* Дело героя с таймером на месте. autoRepeat у места в data.js — повторять, пока доступно. */
     function placeTaskDef(id) {
@@ -897,7 +1037,7 @@
         if (talkable(wn)) { var ip = intercept(wn); return ip ? ip.t : Infinity; }
       }
       var p = standPoint(t, S.hero.x, S.hero.y);
-      return dist(S.hero.x, S.hero.y, p.x, p.y) / walkSpeed();
+      return walkDistance(S.hero.x, S.hero.y, p.x, p.y) / walkSpeed();
     }
     /* Приказ «иди»: к месту, встречному, предмету, костру или в точку. Отменяет прежний маршрут и дело. */
     function order(target, x, y) {
@@ -945,8 +1085,7 @@
     }
     /* Герой встал у места: начать дело или занять место */
     function enterPlace(id, walked, hoped) {
-      var P = D.places[id], sp = standPoint({ kind: 'place', id: id });
-      S.hero.x = sp.x; S.hero.y = sp.y;
+      var P = D.places[id];
       if (id === 'entrance' && entranceBlocked()) {
         if (entranceBlocked() === 'cop') { S.tele.entranceCop++; log('entranceCop'); }
         else {
@@ -996,7 +1135,8 @@
       if (h.asleep) return;
       if ((kx || ky) && !S.moveHold) {                    // клавиатура: идём напрямую
         var len = Math.sqrt(kx * kx + ky * ky);
-        p = clampPos(h.x + kx / len * sp * dt / L.logicalAspect, h.y + ky / len * sp * dt);
+        p = boundedPos(h.x + kx / len * sp * dt / L.logicalAspect, h.y + ky / len * sp * dt);
+        p = slideWalk(h, p.x, p.y);
         if (p.x !== h.x || p.y !== h.y) { h.walking = true; S.walkTime += dt; }
         if (kx) h.dir = kx < 0 ? -1 : 1;
         h.x = p.x; h.y = p.y;
@@ -1007,27 +1147,22 @@
       if (m.target && m.target.kind === 'npc') {          // встречный мог уйти, пока шли
         var n = findNpc(m.target.id);
         if (!talkable(n)) { h.move = null; S.tele.missed++; ev('missed', { id: m.target.id, who: n ? who(n) : m.target.type }); log('npcGone', { name: m.target.name || D.npcs.passerby.name }); return; }
-        if (dist(h.x, h.y, n.x, n.y) <= D.walkers.contact) { h.move = null; arrive(m.target); return; }
+        if (dist(h.x, h.y, n.x, n.y) <= D.walkers.contact && canWalk(h.x,h.y,n.x,n.y)) { h.move = null; arrive(m.target); return; }
         var ip = intercept(n), tp = ip ? clampPos(ip.x, ip.y) : clampPos(n.x, n.y);   // идём наперерез; не догнать — хотя бы следом
         m.x = tp.x; m.y = tp.y;
       }
       if (m.target && m.target.kind === 'item' && !findItem(m.target.id)) { h.move = null; log('itemGone'); return; }
-      var dx = m.x - h.x, dy = m.y - h.y, d = dist(m.x, m.y, h.x, h.y), step = sp * dt;
-      if (Math.abs(dx) > 0.002) h.dir = dx < 0 ? -1 : 1;
-      if (d <= step) {
-        h.x = m.x; h.y = m.y;
-        if (d > 0) S.walkTime += d / sp;
+      var travel = moveOnGround(h, m.x, m.y, sp * dt);
+      h.walking = travel.moved > 0 && !travel.arrived;
+      S.walkTime += travel.moved / sp;
+      if (travel.arrived) {
         if (m.target && m.target.kind === 'npc') {       // пришёл в точку встречи раньше — ждёт, пока тот подойдёт
           var tn = findNpc(m.target.id);
-          if (tn && dist(h.x, h.y, tn.x, tn.y) <= D.walkers.contact) { h.move = null; arrive(m.target); }
+          if (tn && dist(h.x, h.y, tn.x, tn.y) <= D.walkers.contact && canWalk(h.x,h.y,tn.x,tn.y)) { h.move = null; arrive(m.target); }
           return;
         }
         h.move = null;
         arrive(m.target);
-      } else {
-        h.x += dx * (step / d); h.y += dy * (step / d);
-        h.walking = true;
-        S.walkTime += dt;
       }
     }
     /* Клавиши движения: (0,0) — стоим. Нажатие отменяет маршрут и дело. */
@@ -1053,19 +1188,19 @@
         if (h.at === id && (!placeTaskDef(id) || S.menuOpen)) continue;
         var sp = standPoint({ kind: 'place', id: id });
         dd = dist(h.x, h.y, sp.x, sp.y);
-        if (dd <= Wk.reachPlace && dd < bd) { bd = dd; best = { kind: 'place', id: id, label: D.places[id].action }; }
+        if (dd <= Wk.reachPlace && dd < bd && canWalk(h.x,h.y,sp.x,sp.y)) { bd = dd; best = { kind: 'place', id: id, label: D.places[id].action }; }
       }
       for (i = 0; i < S.npcs.length; i++) {
         var n = S.npcs[i];
         if (!talkable(n)) continue;
         dd = dist(h.x, h.y, n.x, n.y);
-        if (dd <= Wk.reach && dd < bd) { bd = dd; best = { kind: 'npc', id: n.id, label: Wk.talkLabel }; }
+        if (dd <= Wk.reach && dd < bd && canWalk(h.x,h.y,n.x,n.y)) { bd = dd; best = { kind: 'npc', id: n.id, label: Wk.talkLabel }; }
       }
       for (i = 0; i < S.items.length; i++) {
         var it = S.items[i];
         if (it.type === 'fire') continue;
         dd = dist(h.x, h.y, it.x, it.y);
-        if (dd <= Wk.reach && dd < bd) { bd = dd; best = { kind: 'item', id: it.id, label: Wk.pickLabel }; }
+        if (dd <= Wk.reach && dd < bd && canWalk(h.x,h.y,it.x,it.y)) { bd = dd; best = { kind: 'item', id: it.id, label: Wk.pickLabel }; }
       }
       return best;
     }
@@ -1504,7 +1639,6 @@
 
     /* ---------- смена фаз ---------- */
     function startPhase() {
-      var i, n;
       var nw = S.weatherAhead.shift();                     // погода этой фазы была заготовлена заранее; впереди всегда две фазы
       S.weatherAhead.push(genWeatherFor(S.phase + 2));
       if (!S.weatherLocked || !S.weather) S.weather = nw;
@@ -1515,10 +1649,6 @@
       } else {
         if (S.phase > 0) log('dayStart', { n: dayNo() });
         if (S.phase > 0 && dayDiv(dayNo()) !== dayDiv(dayNo() - 1)) log('daylight', { d: dayDiv(dayNo()), n: D.time.divisions - dayDiv(dayNo()) });
-        var cnt = randInt(D.npcs.dog.perDayMin, D.npcs.dog.perDayMax);
-        S.dogTimes = [];
-        for (i = 0; i < cnt; i++) S.dogTimes.push(rand(S.phaseTime, D.time.cycleSeconds));
-        S.dogTimes.sort(function (a, b) { return a - b; });
       }
       if (S.phase > 0) {
         var mt = function (v) { return (v < 0 ? '−' : (v > 0 ? '+' : '')) + Math.abs(v); };
@@ -1553,60 +1683,6 @@
     }
 
     /* ---------- встречные ---------- */
-    function nearestFood(x, y) {
-      var best = null, bd = Infinity;
-      for (var i = 0; i < S.items.length; i++) {
-        var it = S.items[i];
-        if (!D.items[it.type].food || it.held || it.locked) continue;
-        var d = dist(x, y, it.x, it.y);
-        if (d < bd) { bd = d; best = it; }
-      }
-      return best;
-    }
-    function spawnDog() {
-      var C = D.npcs.dog, left = rng() < 0.5;
-      var n = {
-        id: nextId++, type: 'dog',
-        x: left ? -L.edgeOutside : 1 + L.edgeOutside,
-        y: rand(C.yMin, C.yMax), dir: left ? 1 : -1, state: 'run', t: 0, targetId: 0
-      };
-      var f = nearestFood(n.x, n.y);
-      S.tele.dogCome++;
-      if (f) { n.state = 'toFood'; n.targetId = f.id; }
-      else log('dogPass');
-      S.npcs.push(n);
-    }
-    function updateDog(n, dt) {
-      var C = D.npcs.dog, step = C.speed * dt;
-      if (n.state === 'toFood') {
-        var it = findItem(n.targetId);
-        if (!it || it.held || it.locked) {
-          it = nearestFood(n.x, n.y);
-          if (!it) { n.state = 'run'; n.dir = n.x < 0.5 ? -1 : 1; return; }
-          n.targetId = it.id;
-        }
-        var d = dist(n.x, n.y, it.x, it.y);
-        if (d <= step) {
-          n.x = it.x; n.y = it.y;
-          removeItem(it);
-          S.tele.dogAte++;
-          if (it.fromFull) S.tele.dogAteDropped++;
-          ev('dogAte', { it: it.type, fromFull: it.fromFull ? 1 : 0 });
-          log('dogEat');
-          n.state = 'eating'; n.t = C.eatSeconds;
-        } else {
-          n.x += (it.x - n.x) * (step / d);
-          n.y += (it.y - n.y) * (step / d);
-          n.dir = it.x >= n.x ? 1 : -1;
-        }
-      } else if (n.state === 'eating') {
-        n.t -= dt;
-        if (n.t <= 0) { n.state = 'run'; n.dir = n.x < 0.5 ? -1 : 1; }
-      } else {
-        n.x += n.dir * step / L.logicalAspect;
-        if (n.x < -L.edgeOutside || n.x > 1 + L.edgeOutside) removeNpc(n);
-      }
-    }
     /* ---------- живые прохожие: ходят по маршрутам из data.js (walkers.routes), уходят за край, в подъезд, в автобус ---------- */
     function sfx(key) { S.sfx.push({ key: key }); if (S.sfx.length > 40) S.sfx.shift(); }
     function walkerMods() {
@@ -1666,11 +1742,26 @@
       }
       return out;
     }
+    // Вставляем углы между смысловыми точками: ожидание, дверь и посадка остаются на исходной цели.
+    function safeWalkerPath(src, start) {
+      var path = [], prev = start;
+      src.forEach(function (point) {
+        var p = projectGround(point.x,point.y);
+        if (prev && !canWalk(prev.x,prev.y,p.x,p.y)) {
+          var corners = groundRoute(prev.x,prev.y,p.x,p.y,true);
+          for (var i = 0; i < corners.length - 1; i++) path.push({x:corners[i].x, y:corners[i].y});
+        }
+        var dest = Object.assign({}, point, p);
+        path.push(dest); prev = dest;
+      });
+      return path;
+    }
     function makeWalker(type, kind, routeId, path, speedF) {
+      path = safeWalkerPath(path);
       var n = {
         id: nextId++, type: type, kind: kind, route: routeId, x: path[0].x, y: path[0].y,
         dir: path[1].x >= path[0].x ? 1 : -1, path: path, leg: 1, wait: 0, state: 'walk', pose: null,
-        speedF: speedF, engaged: false, asked: false, walking: true, held: false
+        speedF: speedF, engaged: false, asked: false, walking: true, held: false, navVersion: 1
       };
       if (path[0].wait) {                                   // начинает с остановки (выходит из подъезда и стоит в дверях)
         n.leg = 0; n.wait = path[0].wait; n.pose = 'stand'; n.walking = false;
@@ -1767,13 +1858,17 @@
     }
     /* Перехват идущего: где и через сколько секунд герой его встретит. null — не догнать. */
     function intercept(n) {
-      var WK = D.walkers, h = S.hero, sp = walkSpeed(), t = 0, p, need;
+      var WK = D.walkers, h = S.hero, sp = walkSpeed(), t = 0;
       var g = { x: n.x, y: n.y, path: n.path, leg: n.leg, wait: n.wait, state: n.state, pose: n.pose, speedF: n.speedF, type: n.type, kind: n.kind, dir: n.dir, engaged: false };
       for (;;) {
-        p = clampPos(g.x, g.y);                           // герой за край двора не выходит
-        need = dist(h.x, h.y, p.x, p.y) - (WK.contact - dist(p.x, p.y, g.x, g.y));
-        if (dist(p.x, p.y, g.x, g.y) <= WK.contact && need <= sp * t + 1e-9) {
-          return { t: (g.x === n.x && g.y === n.y) ? Math.max(0, need) / sp : t, x: g.x, y: g.y };
+        var p = boundedPos(g.x,g.y);                     // путь прохожего свободен, но он может уйти за границу героя
+        if (p.x !== g.x || p.y !== g.y) p = projectGround(p.x,p.y);
+        var reach = WK.contact - dist(p.x,p.y,g.x,g.y), limit = sp*t + 1e-9;
+        if (reach >= 0 && dist(h.x,h.y,p.x,p.y) - reach <= limit) {
+          var need = walkDistance(h.x,h.y,p.x,p.y) - reach;
+          if (need <= limit && canWalk(p.x,p.y,g.x,g.y)) {
+            return { t: (g.x === n.x && g.y === n.y) ? Math.max(0, need) / sp : t, x: g.x, y: g.y };
+          }
         }
         if (t >= WK.lookAhead) return null;
         if (!stepWalker(g, WK.lookStep, true)) return null;
@@ -1961,11 +2056,6 @@
       } else if (S.entranceStay > 0) {
         S.entranceStay = Math.max(0, S.entranceStay - dt * E.patienceRecover);
       }
-      var dayT = (isNight() ? dayLen(dayNo()) : 0) + S.phaseTime;
-      while (S.dogTimes.length && dayT >= S.dogTimes[0]) {
-        S.dogTimes.shift();
-        spawnDog();
-      }
       for (i = S.npcs.length - 1; i >= 0; i--) {
         n = S.npcs[i];
         if (n.type === 'passerby' || n.type === 'granny') {
@@ -1977,8 +2067,10 @@
             n.t -= dt;
             if (n.t <= 0) n.state = 'leave';
           } else {
-            n.x += (1 + 2 * L.edgeOutside) / C.crossSeconds * dt;
-            if (n.state === 'walk' && n.x >= stopX) { n.x = stopX; n.state = 'linger'; n.t = rand(C.lingerMin, C.lingerMax); }
+            var patrol = projectGround(n.state === 'walk' ? stopX : 1 + L.edgeOutside, C.y);
+            var patrolStep = (1 + 2 * L.edgeOutside) * L.logicalAspect / C.crossSeconds * dt;
+            var patrolMove = moveOnGround(n,patrol.x,patrol.y,patrolStep);
+            if (patrolMove.arrived && n.state === 'walk') { n.state = 'linger'; n.t = rand(C.lingerMin, C.lingerMax); }
           }
           if (S.hero.at === 'entrance' && copAtDoor(n)) {
             wake(null);
@@ -1995,9 +2087,7 @@
             S.entranceStay = 0;
             if (!S.over) log('entranceLockSet', { n: Math.ceil(S.entranceLock) });
           }
-          if (n.x > 1 + L.edgeOutside) S.npcs.splice(i, 1);
-        } else if (n.type === 'dog') {
-          updateDog(n, dt);
+          if (n.state === 'leave' && n.x >= 1 + L.edgeOutside) S.npcs.splice(i, 1);
         }
       }
     }
@@ -2122,7 +2212,7 @@
         worn: { head: null, neck: null, body: null, over: null, legs: null, hands: null, feet: null }, bagHandles: false, gs: null,
         weatherAhead: [], forecast: [],
         menuOpen: false,
-        walkerTimer: 0, copTimer: 0, grannyAt: null, dogTimes: [],
+        walkerTimer: 0, copTimer: 0, grannyAt: null,
         bus: null, busTimer: 0, doorOpen: 0,
         stats: { asks: 0, gave: 0, begMoney: 0 },
         tele: newTele(),
@@ -2162,6 +2252,34 @@
     function loadState(sv, stored) {
       if (!sv || sv.kind !== 'bomzh-save' || sv.build !== D.build || sv.formatVersion !== D.save.formatVersion) return false;
       S = copy(sv.S); S.sfx = [];
+      if (!walkable(S.hero.x,S.hero.y)) {
+        var place = S.hero.at && D.places[S.hero.at];
+        Object.assign(S.hero, place ? standPoint({kind:'place',id:S.hero.at}) : projectGround(S.hero.x,S.hero.y));
+      }
+      S.items.forEach(function (it) {
+        if (!walkable(it.x,it.y)) Object.assign(it, projectGround(it.x,it.y));
+      });
+      if (S.hero.move && (S.hero.move.target && S.hero.move.target.kind === 'place' || !walkable(S.hero.move.x,S.hero.move.y))) {
+        var m = S.hero.move;
+        Object.assign(m, standPoint(m.target,m.x,m.y));
+      }
+      S.npcs.forEach(function (n) {
+        if (n.type === 'dog') return;
+        if (!walkable(n.x,n.y)) Object.assign(n, projectGround(n.x,n.y));
+        if (n.path && !n.navVersion) {
+          n.path = n.path.slice(0,n.leg).concat(safeWalkerPath(n.path.slice(n.leg),n));
+          n.navVersion = 1;
+        }
+      });
+      // Совместимость с забегами, записанными до удаления собак.
+      var target = S.hero.move && S.hero.move.target;
+      var oldTarget = target && target.kind === 'npc' && findNpc(target.id);
+      if (target && (target.type === 'dog' || (oldTarget && oldTarget.type === 'dog'))) {
+        S.hero.move = null;
+        S.hero.walking = false;
+      }
+      S.npcs = S.npcs.filter(function (npc) { return npc.type !== 'dog'; });
+      delete S.dogTimes;
       nextId = sv.nextId;
       if (sv.rng !== null && sv.rng !== undefined && rng.setState) rng.setState(sv.rng);
       R = null;
@@ -2187,6 +2305,8 @@
 
     return {
       get state() { return S; },
+      canWalk: canWalk,
+      walkDistance: walkDistance,
       field: field,
       rng: rng,
       saveState: saveState,
@@ -2245,6 +2365,7 @@
       dayLen: dayLen,
       goals: goals,
       findItem: findItem,
+      spawnItemAt: spawnItemAt,
       findNpc: findNpc,
       heat: heat,
       describe: describe,
@@ -3329,7 +3450,7 @@
       if (t.closest && t.closest('.sleep-btn, #shop-menu, #stash')) return;
       if (game.state.menuOpen) { game.closeMenu(); render(); return; }  // клик мимо открытого меню — только закрыть его, бомж стоит где стоял
       var el = directTile(t);
-      /* Прямой клик по предмету, менту, собаке — как раньше. Всё остальное сначала отдаём зоне прохожего: ближайший к курсору. */
+      /* Прямой клик по предмету или менту — как раньше. Всё остальное сначала отдаём зоне прохожего: ближайший к курсору. */
       if (el && !el.classList.contains('walker') && el.dataset.kind !== 'hero') { game.order({ kind: el.dataset.kind, id: parseInt(el.dataset.id, 10) }); render(); return; }
       var pk = pickAt(e.clientX, e.clientY);
       if (pk && pk.kind === 'npc') { game.order({ kind: 'npc', id: pk.n.id }); render(); return; }

@@ -57,7 +57,7 @@
       setStage(outbound ? 'outbound' : 'inbound');
       nextPoint(outbound ? 1 : -1);
     }
-    game.update(dt * speed);
+    game.update(dt * speed / window.GAME_DATA.hero.walk.heroMult);
     if (game.state.hero.move) return;
     if (stage === 'outbound' && index === route.length - 1) { wait = 3.2; setStage('door'); }
     else if (stage === 'inbound' && index === 0) setStage('done');
@@ -81,7 +81,7 @@
   document.title = 'Бомж — проверка походки';
   var weather = document.getElementById('weather');
   weather.dataset.type = 'calm'; weather.dataset.precip = 'none'; weather.dataset.wind = '0';
-  setSpeed(1);
+  setSpeed(.65);
   restart();
   requestAnimationFrame(frame);
 })();
