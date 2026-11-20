@@ -9,6 +9,10 @@
 }
 #art-bg { z-index: 0; }
 #art-steps { z-index: 0; }
+#art-posts { z-index: 5; }
+.painted-courtyard .tile.in-front-of-post { z-index: 6; }
+.painted-courtyard .npc.in-front-of-post, .painted-courtyard .bus.in-front-of-post { z-index: 7; }
+.painted-courtyard .hero.in-front-of-post { z-index: 8; }
 #art-fx { z-index: 16; }
 
 /* ---------- двор ---------- */

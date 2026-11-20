@@ -750,6 +750,7 @@
    * ===================================================================== */
   var field, bg, fx, bc, fc, frostCv = null, W = 0, H = 0, raf = 0, lastT = 0;
   var courtyard = null;
+  var postMask = null, postLayer = null, tiles = null;
   var closedShopArt = null;
   // Координаты фрагмента в атласе, размеры и положение на рисунке двора 1808×870.
   var shopFronts = [
@@ -768,13 +769,47 @@
       var x = shop.x * W / courtyard.width, y = shop.y * H / courtyard.height;
       var w = shop.w * W / courtyard.width, h = shop.h * H / courtyard.height;
       bc.drawImage(courtyard, shop.x, shop.y, shop.w, shop.h, x, y, w, h);
-      if (closed) bc.drawImage(closedShopArt, shop.sx, shop.sy, shop.w, shop.h, x, y, w, h);
+      if (closed) {
+        bc.drawImage(closedShopArt, shop.sx, shop.sy, shop.w, shop.h, x, y, w, h);
+        if (shop.id === 'stall') drawPostSilhouettes(bc);
+      }
     });
   }
   var NIGHT = 0.72;                // плотность темноты ночью
   var dark = 0;
   var windows = [], winTimer = 0, houseH = 0, houseW = 0, roadY = 0;
-  var lamp = { x: 0, y: 0 }, lampPuddle = null, streetLamps = [];
+  // Координаты стекла и пятки каждого столба на иллюстрации, в долях игрового поля.
+  var streetLamps = [
+    { x: 0.4126, y: 0.5287, footX: 0.3684, footY: 0.8644 },
+    { x: 0.6067, y: 0.5287, footX: 0.6466, footY: 0.8655 }
+  ];
+  // Контур столбов, дуг и плафонов на исходном холсте. Один и тот же срез
+  // сохраняет их перед закрытой палаткой и перекрывает идущую за столбом фигуру.
+  function drawPostSilhouettes(ctx) {
+    if (!courtyard) return;
+    if (!postMask) {
+      postMask = new Path2D();
+      var outline = new Path2D('M12 328 L13 318 17 314 21 272 21 72 19 70 19 61 21 59 22 45 Q22 14 57 14 L88 14 Q99 15 107 19 L106 25 Q124 25 126 34 Q124 46 104 46 Q85 45 85 35 Q85 27 101 25 L101 22 Q90 19 79 20 L57 20 Q29 20 29 45 L30 60 32 61 32 70 30 72 30 270 34 314 39 319 40 326 Q26 333 12 328 Z');
+      postMask.addPath(outline, new DOMMatrix().translate(640, 425));
+      // Арматура справа имеет зеркальный вынос и немного другую ширину дуги.
+      postMask.addPath(outline, new DOMMatrix().translate(1193, 426).scale(-0.93, 1));
+    }
+    ctx.save();
+    ctx.scale(W / 1808, H / 870);
+    ctx.clip(postMask);
+    ctx.drawImage(courtyard, 0, 0, 1808, 870);
+    ctx.restore();
+  }
+
+  function refreshPostLayer() {
+    if (!postLayer) {
+      postLayer = document.createElement('canvas');
+      postLayer.id = 'art-posts'; postLayer.className = 'art-layer';
+      postLayer.setAttribute('aria-hidden', 'true');
+    }
+    postLayer.width = W; postLayer.height = H;
+    drawPostSilhouettes(postLayer.getContext('2d'));
+  }
   var flakes = [], puffs = [], breathT = 0, kioskDim = 0, tNow = 0;
   var weatherEl = null, flakeN = 0, lastWind = -1;
   var stepsCv = null, sc = null, steps = [], lastStep = null, stepSide = 1, stepsDirty = false;
@@ -918,6 +953,7 @@
     if (courtyard) {
       // Изображение и точки взаимодействия растягиваются в одних и тех же долях игрового поля.
       bc.drawImage(courtyard, 0, 0, W, H);
+      refreshPostLayer();
       paintShopFronts(true);
       // Границы стёкол фасада на исходном холсте 1808×870. Рамы и снег остаются поверх света.
       var glazed = [[29, 24, 50, 56, 78, 80], [200, 24, 221, 228, 252, 80],
@@ -928,11 +964,9 @@
         return { x: g[0] * W / 1808, y: g[1] * H / 870, w: (g[4] - g[0]) * W / 1808, h: (g[5] - g[1]) * H / 870,
           pane1: (g[2] - g[0]) * W / 1808, pane2: (g[3] - g[0]) * W / 1808, lit: index % 3 !== 0, tone: index % 2 === 0 };
       });
-      lampPuddle = null;
-      lamp.x = W * 0.658; lamp.y = H * 0.349;
-      streetLamps = [0.09, 0.369, 0.611, 0.898].map(function (x) { return { x: x * W, y: H * 0.778 }; });
-      heatVents = [[0.083, 0.428], [0.075, 0.53], [0.075, 0.628], [0.076, 0.69]].map(function (point) {
-        return { x: point[0] * W, y: point[1] * H, w: 0.045 * W };
+      heatVents = [[0.0747, 0.4161, 0.03], [0.0741, 0.6828, 0.025],
+        [0.0642, 0.2943, 0.021], [0.1056, 0.2322, 0.005], [0.1554, 0.2322, 0.005]].map(function (point) {
+        return { x: point[0] * W, y: point[1] * H, w: point[2] * W };
       });
       return;
     }
@@ -943,7 +977,6 @@
     var swY = H * ST.sidewalkTop;           // тротуар: полоса между двором и дорогой, по ней ходят прохожие
     roadY = H * ST.roadTop;
     var roadH = H - roadY;
-    lamp.x = W * 0.615; lamp.y = H * 0.4;
 
     /* мокрый асфальт */
     var g = c.createLinearGradient(0, 0, 0, H);
@@ -982,7 +1015,6 @@
       c.fillStyle = 'rgba(120,145,165,.1)';
       c.beginPath(); c.ellipse(x + pud[i][2] * 0.2, y + 2, pud[i][2] * 0.35, pud[i][3] * 0.3, 0, 0, 6.28); c.fill();
     }
-    lampPuddle = { x: pud[0][0] * W, y: pud[0][1] * H, rx: pud[0][2], ry: pud[0][3] };
 
     /* грязный снег: газоны, края, под домом */
     snowPatch(c, r, W * 0.27, H * 0.51, W * 0.105, H * 0.125);
@@ -1112,17 +1144,15 @@
     }
     for (i = 0; i < windows.length; i++) drawWindow(windows[i]);
 
-    /* фонари: основание и плафон — дворовый и такие же вдоль дороги (walkers.street.lamps в data.js) */
-    function lampPost(lp) {
-      c.fillStyle = 'rgba(0,0,0,.35)'; c.beginPath(); c.ellipse(lp.x + 26, lp.y + 44, 30, 6, 0.2, 0, 6.28); c.fill();
-      c.strokeStyle = '#161a1e'; c.lineWidth = 7; c.beginPath(); c.moveTo(lp.x + 30, lp.y + 44); c.lineTo(lp.x + 30, lp.y - 6); c.lineTo(lp.x + 4, lp.y - 6); c.stroke();
-      c.strokeStyle = '#4a545c'; c.lineWidth = 3.5; c.beginPath(); c.moveTo(lp.x + 30, lp.y + 44); c.lineTo(lp.x + 30, lp.y - 6); c.lineTo(lp.x + 4, lp.y - 6); c.stroke();
-      c.fillStyle = '#20262b'; c.beginPath(); c.ellipse(lp.x, lp.y - 4, 13, 7, 0, 0, 6.28); c.fill();
-      c.fillStyle = '#2b3238'; c.beginPath(); c.ellipse(lp.x + 30, lp.y + 45, 9, 4.5, 0, 0, 6.28); c.fill();
-    }
-    lampPost(lamp);
-    streetLamps = (ST.lamps || []).map(function (fx) { return { x: W * fx - 30, y: H * (ST.lampY || 0.9) - 44 }; });   // столб стоит у бордюра, плафон смотрит на тротуар
-    streetLamps.forEach(lampPost);
+    /* Резервный нарисованный столб имеет ту же высоту и тот же вынос плафона, что и на иллюстрации. */
+    streetLamps.forEach(function (post) {
+      var x = post.x * W, y = post.y * H, footX = post.footX * W, footY = post.footY * H;
+      c.beginPath(); c.moveTo(footX, footY); c.lineTo(footX, y + H * 0.035);
+      c.quadraticCurveTo(footX, y - H * 0.02, x, y - H * 0.008);
+      c.lineWidth = Math.max(2, H * 0.009); c.strokeStyle = '#252c31'; c.stroke();
+      c.lineWidth *= 0.45; c.strokeStyle = '#687478'; c.stroke();
+      c.fillStyle = '#3d464b'; c.beginPath(); c.ellipse(x, y, W * 0.009, H * 0.006, 0, 0, 6.28); c.fill();
+    });
   }
 
   /* Иней по краям поля: рисуется один раз на размер окна, дальше им управляет только прозрачность и масштаб (--frost, задаёт game.js).
@@ -1220,6 +1250,26 @@
     fc.beginPath(); fc.arc(x, y, rad, 0, 6.28); fc.fill();
   }
 
+  // Плафон светится на высоте, а свет ложится широким овалом на тротуар под его выносом.
+  function drawStreetLighting(k, cutDarkness) {
+    streetLamps.forEach(function (post) {
+      var x = post.x * W, y = post.y * H;
+      var height = post.footY - post.y;
+      fc.save();
+      fc.translate(x, (post.footY + 0.022) * H);
+      fc.scale(W * height * 0.41, H * height * 0.18);
+      if (cutDarkness) cut(0, 0, 1, 0.86);
+      else glow(0, 0, 1, 0.28 * k, '255,200,124');
+      fc.restore();
+      if (cutDarkness) return;
+      var halo = Math.max(6, Math.min(W * 0.036, H * 0.066));
+      glow(x, y, halo, 0.44 * k, '255,205,136');
+      glow(x, y, halo * 0.35, 0.65 * k, '255,229,179');
+      fc.fillStyle = 'rgba(255,239,197,' + 0.92 * k + ')';
+      fc.beginPath(); fc.ellipse(x, y, W * 0.0053, H * 0.0028, 0, 0, Math.PI * 2); fc.fill();
+    });
+  }
+
   function frame(t) {
     raf = requestAnimationFrame(frame);
     var dt = Math.min(0.05, lastT ? (t - lastT) / 1000 : 0.016);
@@ -1227,6 +1277,14 @@
     if (field.clientWidth !== W || field.clientHeight !== H) resize();
     if (!W) return;
     paintShopFronts(false);
+    if (postLayer) {
+      if (postLayer.parentNode !== tiles) tiles.appendChild(postLayer);
+      for (var child = tiles.firstElementChild; child; child = child.nextElementSibling) {
+        if (child === postLayer) continue;
+        var post = parseFloat(child.style.left) < W * 0.5 ? streetLamps[0] : streetLamps[1];
+        child.classList.toggle('in-front-of-post', parseFloat(child.style.top) >= H * post.footY);
+      }
+    }
     var night = field.classList.contains('night');
     if (!weatherEl) weatherEl = document.getElementById('weather');
     var wind = weatherEl ? Math.min(2, +weatherEl.dataset.wind || 0) : 0;
@@ -1242,8 +1300,7 @@
     if (kioskDim > 0) kioskDim -= dt; else if (Math.random() < dt * 0.35) kioskDim = 0.07 + Math.random() * 0.12;
 
     /* источники света */
-    var lights = [{ x: lamp.x, y: lamp.y + 34, r: Math.max(210, W * 0.135), a: 1, w: 0.17 }];
-    for (i = 0; i < streetLamps.length; i++) lights.push({ x: streetLamps[i].x, y: streetLamps[i].y + 30, r: Math.max(150, W * 0.092), a: 0.9, w: 0.13 });   // уличные: пятно меньше дворового
+    var lights = [];
     var el = document.getElementById('place-entrance');
     if (el) { p = centerOf(el, fr); var dOpen = el.classList.contains('door-open'); lights.push({ x: p.x, y: p.y + 10, r: dOpen ? 215 : 135, a: dOpen ? 1 : 0.95, w: dOpen ? 0.34 : 0.13 }); }   // приоткрытая дверь («зайти следом») ночью светит сильнее и дальше
     el = document.getElementById('place-kiosk');
@@ -1333,6 +1390,7 @@
       fc.fillRect(0, 0, W, H);
       fc.globalCompositeOperation = 'destination-out';
       for (i = 0; i < lights.length; i++) cut(lights[i].x, lights[i].y, lights[i].r, lights[i].a);
+      drawStreetLighting(k, true);
       fc.fillStyle = 'rgba(0,0,0,.93)';
       for (i = 0; i < windows.length; i++) {
         var w = windows[i];
@@ -1370,16 +1428,7 @@
       fc.beginPath(); fc.moveTo(gx - 15, gy); fc.lineTo(gx + 15, gy); fc.lineTo(gx + 62, gy + 130); fc.lineTo(gx - 62, gy + 130); fc.closePath(); fc.fill();
       glow(dp.x - 4, dp.y + 2, 66, 0.42 * k * pl, '255,214,140');
     }
-    if (k > 0.03) {
-      glow(lamp.x, lamp.y - 2, 26, 0.9 * k, '255,226,160');
-      for (i = 0; i < streetLamps.length; i++) glow(streetLamps[i].x, streetLamps[i].y - 2, 24, 0.85 * k, '255,226,160');
-      if (lampPuddle) {
-        fc.fillStyle = 'rgba(255,196,110,' + (0.3 * k) + ')';
-        fc.beginPath(); fc.ellipse(lampPuddle.x - 14, lampPuddle.y - 2, lampPuddle.rx * 0.3, lampPuddle.ry * 0.4, 0, 0, 6.28); fc.fill();
-        fc.fillStyle = 'rgba(255,236,190,' + (0.5 * k) + ')';
-        fc.beginPath(); fc.ellipse(lampPuddle.x - 16, lampPuddle.y - 3, 5, 2.5, 0, 0, 6.28); fc.fill();
-      }
-    }
+    if (k > 0.01) drawStreetLighting(k, false);
     fc.globalCompositeOperation = 'source-over';
 
     /* пар: теплотрасса, люк, дыхание героя */
@@ -1426,7 +1475,7 @@
     var n = Math.min(flakes.length, Math.round(flakeN));
     var windV = WIND_PX[wind] * (1 + 0.25 * Math.sin(tNow * 0.7)) + 6 * Math.sin(tNow * 0.23);
     var vyMul = wet ? 1.9 : (blow ? 1.2 : 1);
-    var lr = lights[0].r * 0.85, lr2 = lr * lr, s, vx, vy;
+    var lr = Math.min(W * 0.065, H * 0.13), lr2 = lr * lr, s, vx, vy;
     if (blow || wet) {
       fc.beginPath();
       for (i = 0; i < n; i++) {
@@ -1449,7 +1498,8 @@
         s.x += (windV + Math.sin(tNow * 1.3 + s.ph) * 14) * dt;
         if (s.y > H + 4) { s.y = -4; s.x = Math.random() * W; }
         if (s.x > W + 4) { s.x = -4; s.y = Math.random() * H; }
-        var dx = s.x - lights[0].x, dy = s.y - lights[0].y;
+        var nearestLamp = s.x < W / 2 ? streetLamps[0] : streetLamps[1];
+        var dx = s.x - nearestLamp.x * W, dy = s.y - nearestLamp.y * H;
         if (k > 0.2 && dx * dx + dy * dy < lr2) fc.fillStyle = 'rgba(255,228,176,' + (0.55 + 0.4 * k) + ')';
         else fc.fillStyle = 'rgba(226,234,240,' + (0.78 - 0.4 * k) + ')';
         fc.beginPath(); fc.arc(s.x, s.y, s.r, 0, 6.28); fc.fill();
@@ -1460,6 +1510,7 @@
   function init() {
     field = document.getElementById('field');
     if (!field) return;
+    tiles = document.getElementById('layer-tiles');
     buildSpriteCss();
     bg = document.createElement('canvas'); bg.id = 'art-bg'; bg.className = 'art-layer';
     fx = document.createElement('canvas'); fx.id = 'art-fx'; fx.className = 'art-layer';
@@ -1478,7 +1529,7 @@
       if (W && H) drawBg();
       field.classList.add('painted-courtyard');
     };
-    plate.src = 'courtyard.webp?v=024';
+    plate.src = 'courtyard.webp?v=027';
     var shutters = new Image();
     shutters.onload = function () { closedShopArt = shutters; if (W && H) paintShopFronts(true); };
     shutters.src = 'shops-closed.webp';
