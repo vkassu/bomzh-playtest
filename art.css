@@ -9,10 +9,17 @@
 }
 #art-bg { z-index: 0; }
 #art-steps { z-index: 0; }
-#art-posts { z-index: 5; }
-.painted-courtyard .tile.in-front-of-post { z-index: 6; }
-.painted-courtyard .npc.in-front-of-post, .painted-courtyard .bus.in-front-of-post { z-index: 7; }
-.painted-courtyard .hero.in-front-of-post { z-index: 8; }
+#art-bench { z-index: 5; }
+#art-table { z-index: 15; }
+#art-kiosk-front, #art-recycle-front { z-index: 25; }
+#art-posts { z-index: 35; }
+.painted-courtyard [data-depth="path"] { --ground-depth: 10; }
+.painted-courtyard [data-depth="yard"] { --ground-depth: 20; }
+.painted-courtyard [data-depth="pavement"] { --ground-depth: 30; }
+.painted-courtyard [data-depth="street"] { --ground-depth: 40; }
+.painted-courtyard .tile { z-index: calc(var(--ground-depth, 0) + 2); }
+.painted-courtyard .npc, .painted-courtyard .bus { z-index: calc(var(--ground-depth, 0) + 3); }
+.painted-courtyard .hero { z-index: calc(var(--ground-depth, 0) + 4); }
 #art-fx { z-index: 16; }
 
 /* ---------- двор ---------- */
@@ -759,7 +766,7 @@ body { background: #0b0f14; }
 .painted-courtyard .place-bench    { --object-x:53.6%; --object-y:19.4%; --object-w:8%; --object-h:14.6%; }
 .painted-courtyard .place-bin      { --object-x:86.9%; --object-y:14.2%; --object-w:9%; --object-h:21.5%; }
 .painted-courtyard .place-pipe     { --object-x:4.3%; --object-y:33.7%; --object-w:8.4%; --object-h:21.3%; }
-.painted-courtyard .place-den      { --object-x:4%; --object-y:63.7%; --object-w:9.4%; --object-h:14.7%; }
+.painted-courtyard .place-den      { --object-x:4%; --object-y:63.7%; --object-w:9.4%; --den-caption-room:0px; --object-h:calc(14.7% + var(--den-caption-room)); }
 .painted-courtyard .place-stall    { --object-x:44.1%; --object-y:33.4%; --object-w:18.8%; --object-h:23.4%; }
 .painted-courtyard .place-kiosk    { --object-x:21.65%; --object-y:57.4%; --object-w:12.7%; --object-h:27.1%; }
 .painted-courtyard .place-recycle  { --object-x:66.9%; --object-y:58.2%; --object-w:14%; --object-h:26.5%; }
@@ -773,6 +780,22 @@ body { background: #0b0f14; }
 .painted-courtyard .place .place-label { font-size: clamp(10px, .84vw, 13px); letter-spacing: .015em; }
 .painted-courtyard .place .place-sub { font-size: clamp(9px, .73vw, 11px); }
 .painted-courtyard .place-sub:empty { display: none; }
+.tile.talking .tile-label { visibility: hidden; }
+.bar.bar-talk { width: min(150px, 42vw); height: 9px; transform: translate(-50%, -100%); }
+.talk-names { display: none; }
+.bar-talk .talk-names {
+  position: absolute; bottom: calc(100% + 3px); left: -2px; right: -2px;
+  display: flex; justify-content: space-between; align-items: center; gap: 5px;
+  padding: 2px 5px; border-radius: 2px; color: #f4ecdc; background: rgba(24,30,31,.94);
+  font: bold 10px/1.2 system-ui, sans-serif; white-space: nowrap;
+}
+.painted-courtyard:has(#stash:not(.hidden)) .place-den { --den-caption-room: 24px; }
+.painted-courtyard:has(#stash:not(.hidden)) .tile.hero .tile-label {
+  position: absolute; right: calc(50% + 17px); bottom: 45%;
+}
+@media (max-width: 600px) {
+  .painted-courtyard:has(#stash:not(.hidden)) .tile.hero .tile-label { right: 50%; bottom: 82%; }
+}
 .painted-courtyard .place.closed { filter: none; }
 .painted-courtyard .place.closed .place-sub { background: #673c33; }
 .painted-courtyard .place.near { box-shadow: none !important; }
@@ -781,21 +804,32 @@ body { background: #0b0f14; }
 }
 .painted-courtyard .place::before { content: ''; position: absolute; pointer-events: none; }
 .painted-courtyard .place-den::before {
-  left: 12%; top: 17%; width: 58%; height: 32%; background-position: center; background-size: 100% 100%;
+  left: 12%; top: calc(17% - var(--den-caption-room) * .17); width: 58%;
+  height: calc(32% - var(--den-caption-room) * .32); background-position: center; background-size: 100% 100%;
   background-repeat: no-repeat;
-}
-.painted-courtyard .place-entrance.door-open::before {
-  left: 42%; top: 30%; width: 27%; height: 43%;
-  background: linear-gradient(90deg, #3e3229 0 15%, #8c704d 23%, #e1bd81 57%, #694e33 62%, #513f31 93%);
-  box-shadow: 0 0 8px rgba(255,194,99,.45);
 }
 .painted-courtyard .tile.hero, .painted-courtyard .tile.npc {
   margin-top: -18px; /* координата актёра обозначает место, на котором он стоит */
 }
-.painted-courtyard #art-bg { transition: filter 2s ease-out; }
-#game:has(#clock[data-rhythm="morning"]) .painted-courtyard:not(.night) #art-bg {
+#field .tile.hero.hero-atlas:not(.asleep) {
+  animation: none;
+  width: calc(var(--hero-height) * .55); height: var(--hero-height);
+  transform: translate(-50%, -100%); margin-top: 0;
+}
+#field .tile.hero.hero-atlas:not(.asleep) .tile-emoji {
+  position: absolute; left: 50%; bottom: calc(var(--cell-height) * -.04375);
+  width: calc(var(--cell-height) * .8); height: var(--cell-height);
+  background-image: url("hero-walk.webp?v=029") !important;
+  background-size: 500% 300%; background-position: var(--gait-col) var(--gait-row);
+  animation: none; transform: translateX(-50%); transform-origin: center;
+}
+#field .tile.hero.hero-atlas[data-facing="left"]:not(.asleep) .tile-emoji { transform: translateX(-50%) scaleX(-1); }
+#field .tile.hero.hero-atlas:not(.asleep) .tile-label { position: absolute; top: calc(100% + 2px); }
+#field.painted-courtyard:has(#stash:not(.hidden)) .tile.hero.hero-atlas:not(.asleep) .tile-label { top: auto; }
+.painted-courtyard :is(#art-bg, #art-posts, .furniture-front) { transition: filter 2s ease-out; }
+#game:has(#clock[data-rhythm="morning"]) .painted-courtyard:not(.night) :is(#art-bg, #art-posts, .furniture-front) {
   filter: sepia(.13) saturate(.91) brightness(1.04);
 }
-#game:has(#clock[data-rhythm="evening"], #clock[data-rhythm="late"]) .painted-courtyard:not(.night) #art-bg {
+#game:has(#clock[data-rhythm="evening"], #clock[data-rhythm="late"]) .painted-courtyard:not(.night) :is(#art-bg, #art-posts, .furniture-front) {
   filter: sepia(.22) saturate(1.09) brightness(.85);
 }

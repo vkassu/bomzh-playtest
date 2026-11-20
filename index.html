@@ -4,9 +4,11 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <title>Бомж v0.1</title>
+<script>if (new URLSearchParams(location.search).get('walktest') === '1') document.documentElement.classList.add('walk-preview');</script>
 <link rel="stylesheet" href="style.css?v=20261120b">
-<link rel="stylesheet" href="art.css?v=027">
-<link rel="stylesheet" href="menu.css?v=024">
+<link rel="stylesheet" href="art.css?v=029">
+<link rel="stylesheet" href="menu.css?v=029">
+<link rel="stylesheet" href="kiosk.css?v=030b">
 </head>
 <body>
 <div id="game">
@@ -107,6 +109,7 @@
       <div class="menu-tools">
         <button id="menu-help-btn" type="button">Как играть</button>
         <button id="start-rec-btn" type="button" class="rec-link">Записи</button>
+        <a id="menu-walk-link" href="?walktest=1">Проверить походку</a>
       </div>
     </div>
     <dialog id="menu-info-dialog" aria-labelledby="menu-info-title">
@@ -127,6 +130,17 @@
       <button id="menu-info-close" type="button">В меню</button>
     </dialog>
   </div>
+
+  <section id="walk-controls" aria-label="Проверка походки">
+    <strong id="walk-stage" aria-live="polite">У остановки</strong>
+    <div role="group" aria-label="Темп ходьбы">
+      <button id="walk-normal" type="button" aria-pressed="true">Обычный ×1</button>
+      <button id="walk-slow" type="button" aria-pressed="false">Спокойный ×0,65</button>
+    </div>
+    <button id="walk-pause" type="button">Пауза</button>
+    <button id="walk-repeat" type="button">Повторить</button>
+    <a id="walk-exit" href="./index.html">В меню</a>
+  </section>
 
   <div id="save-modal" class="hidden" role="dialog" aria-modal="true" aria-labelledby="save-title">
     <div id="save-panel">
@@ -169,9 +183,10 @@
 
 </div>
 <script src="data.js?v=023"></script>
-<script src="game.js?v=023"></script>
-<script src="sound.js?v=025"></script>
-<script src="art.js?v=027"></script>
-<script src="menu.js?v=023"></script>
+<script src="game.js?v=029"></script>
+<script src="sound.js?v=029"></script>
+<script src="art.js?v=029"></script>
+<script src="menu.js?v=029"></script>
+<script src="walktest.js?v=029"></script>
 </body>
 </html>

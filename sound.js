@@ -3,6 +3,7 @@
    Нет Web Audio — игра работает молча. */
 (function (global) {
   'use strict';
+  if (typeof document !== 'undefined' && document.documentElement.classList.contains('walk-preview')) return;
 
   var D = global.GAME_DATA, CFG = D && D.sound;
   var AC = global.AudioContext || global.webkitAudioContext;

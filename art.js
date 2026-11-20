@@ -750,14 +750,112 @@
    * ===================================================================== */
   var field, bg, fx, bc, fc, frostCv = null, W = 0, H = 0, raf = 0, lastT = 0;
   var courtyard = null;
+  var walkAtlasReady = false, gait = null;
+
+  function drawHeroGait(el, now) {
+    if (!el || !walkAtlasReady) return;
+    var x = parseFloat(el.style.left) / W, y = parseFloat(el.style.top) / H;
+    if (!isFinite(x) || !isFinite(y)) return;
+    if (!gait || gait.el !== el) gait = { el: el, x: x, y: y, facing: 'front', phase: 0, movedAt: -1000 };
+    // У двери 96 пикселей высоты. У остановки сиденье в 29 пикселях над землёй.
+    var depth = Math.max(0, Math.min(1.2, (y - 0.265) / 0.599));
+    var bodyH = (82 + depth * 31) * H / 870;
+    var cellH = bodyH * 160 / 146;
+    var dx = (x - gait.x) * W, dy = (y - gait.y) * H, distance = Math.hypot(dx, dy);
+    var awake = !el.classList.contains('asleep');
+    var walking = awake && el.classList.contains('walking');
+    if (walking && distance > 0.03 && distance < bodyH * 1.15) {
+      // Выбираем ракурс по игровому направлению независимо от пропорций окна.
+      var sx = (x - gait.x) * window.GAME_DATA.layout.logicalAspect, sy = y - gait.y;
+      var side = Math.abs(sx) > Math.abs(sy) * (gait.facing === 'left' || gait.facing === 'right' ? .9 : 1.12);
+      gait.facing = side ? (sx < 0 ? 'left' : 'right') : (sy < 0 ? 'back' : 'front');
+      gait.phase = (gait.phase + distance / (bodyH * 1.05)) % 1;
+      gait.movedAt = now;
+    }
+    gait.x = x; gait.y = y;
+    var frame = walking && now - gait.movedAt < 120 ? 1 + Math.floor(gait.phase * 4) : 0;
+    if (el.dataset.gaitPaused === 'true') frame = Number(el.dataset.gaitFrame || 0);
+    var row = gait.facing === 'front' ? 0 : gait.facing === 'back' ? 1 : 2;
+    el.classList.add('hero-atlas');
+    if (el.dataset.facing !== gait.facing) {
+      el.dataset.facing = gait.facing;
+      el.style.setProperty('--gait-row', (row * 50) + '%');
+    }
+    if (el.dataset.gaitFrame !== String(frame)) {
+      el.dataset.gaitFrame = String(frame);
+      el.style.setProperty('--gait-col', (frame * 25) + '%');
+    }
+    if (gait.bodyH !== bodyH) {
+      gait.bodyH = bodyH;
+      el.style.setProperty('--hero-height', bodyH.toFixed(2) + 'px');
+      el.style.setProperty('--cell-height', cellH.toFixed(2) + 'px');
+    }
+  }
   var postMask = null, postLayer = null, tiles = null;
   var closedShopArt = null;
+  var openDoorArt = null, doorWasOpen = null;
+  // Левый верхний угол фрагмента в координатах иллюстрации 1808×870.
+  var doorPatch = { x: 795, y: 126 };
+
+  function paintEntrance(force) {
+    if (!courtyard || !openDoorArt) return;
+    var entrance = document.getElementById('place-entrance');
+    var open = !!entrance && entrance.classList.contains('door-open');
+    if (!force && open === doorWasOpen) return;
+    doorWasOpen = open;
+    var x = doorPatch.x * W / courtyard.width, y = doorPatch.y * H / courtyard.height;
+    var w = openDoorArt.width * W / courtyard.width, h = openDoorArt.height * H / courtyard.height;
+    bc.save();
+    bc.beginPath();
+    bc.rect(Math.floor(x), Math.floor(y), Math.ceil(x + w) - Math.floor(x), Math.ceil(y + h) - Math.floor(y));
+    bc.clip();
+    bc.drawImage(courtyard, 0, 0, W, H);
+    if (open) bc.drawImage(openDoorArt, x, y, w, h);
+    bc.restore();
+  }
   // Координаты фрагмента в атласе, размеры и положение на рисунке двора 1808×870.
   var shopFronts = [
     { id: 'stall', sx: 0, sy: 0, w: 360, h: 178, x: 790, y: 282 },
     { id: 'kiosk', sx: 0, sy: 178, w: 220, h: 144, x: 392, y: 554 },
     { id: 'recycle', sx: 224, sy: 178, w: 100, h: 85, x: 1282, y: 566 }
   ];
+  // Отдельные вырезы с картинки закрывают часть персонажа, когда он стоит за мебелью.
+  var benchFront = { id: 'bench', x: 960, y: 155, w: 170, h: 114,
+    outline: 'M14 25 Q17 14 31 18 Q40 14 53 18 Q60 14 74 18 L95 16 Q102 12 112 16 Q139 9 143 23 L143 52 L132 53 L132 58 L143 59 L154 71 L153 77 L144 77 L143 100 L137 102 L135 77 L40 77 L38 102 L31 102 L31 78 L27 85 L27 77 L18 77 L15 64 L18 60 L28 59 L28 53 L15 53 Z' };
+  var tableFront = { id: 'table', x: 790, y: 282, w: 360, h: 178,
+    shop: shopFronts[0],
+    outline: 'M125 121 L136 119 Q139 109 162 114 Q169 107 175 115 L186 117 Q194 107 214 113 L225 116 Q230 109 241 113 L250 116 Q257 105 280 111 L288 116 L304 129 L307 164 L301 165 L299 135 L284 136 L282 166 L277 166 L276 137 L193 140 L192 171 L187 172 L186 141 L143 142 L139 173 L135 174 L135 143 L129 143 L128 164 L125 165 Z',
+    closedOutline: 'M14 137 L34 41 Q76 35 109 14 Q170 31 212 8 Q242 13 286 6 L310 40 L329 126 L343 159 L325 163 L319 170 Q163 179 44 169 L25 169 Z' };
+  var kioskFront = { id: 'kiosk-front', x: 380, y: 485, w: 245, h: 218, shop: shopFronts[1],
+    outline: 'M15 60 Q14 45 34 42 Q49 37 72 41 L71 31 Q69 16 83 16 Q124 9 170 14 Q188 14 188 34 L185 42 Q212 40 218 48 L230 73 L228 81 L229 178 L221 183 L220 196 Q196 209 168 202 L65 203 L64 196 Q45 191 36 198 L35 186 L18 178 Z' };
+  var recycleFront = { id: 'recycle-front', x: 1196, y: 495, w: 274, h: 209, shop: shopFronts[2],
+    outline: 'M25 42 Q26 24 36 19 Q89 15 123 19 Q166 12 216 18 Q228 21 229 43 L226 69 L226 123 L230 121 L233 126 L237 124 L242 120 L245 131 L250 120 L258 141 L262 146 L261 190 L249 192 L243 187 L228 188 L208 195 L199 192 L195 188 Q151 197 117 191 L91 192 L82 188 L77 196 L59 191 L47 195 L33 191 L22 193 L21 156 Q20 145 30 144 L28 68 Z' };
+  var foreground = [benchFront, tableFront, kioskFront, recycleFront];
+
+  function paintFurniture(cutout) {
+    if (!cutout.canvas) {
+      var canvas = document.createElement('canvas');
+      canvas.id = 'art-' + cutout.id;
+      canvas.className = 'art-layer furniture-front';
+      canvas.setAttribute('aria-hidden', 'true');
+      canvas.width = cutout.w; canvas.height = cutout.h;
+      canvas.style.left = (cutout.x / courtyard.width * 100) + '%';
+      canvas.style.top = (cutout.y / courtyard.height * 100) + '%';
+      canvas.style.width = (cutout.w / courtyard.width * 100) + '%';
+      canvas.style.height = (cutout.h / courtyard.height * 100) + '%';
+      cutout.canvas = canvas;
+    }
+    var ctx = cutout.canvas.getContext('2d');
+    var shop = cutout.shop;
+    var closed = shop && closedShopArt && shop.closed;
+    ctx.clearRect(0, 0, cutout.w, cutout.h);
+    ctx.save();
+    ctx.clip(new Path2D(closed && cutout.closedOutline || cutout.outline));
+    ctx.drawImage(courtyard, cutout.x, cutout.y, cutout.w, cutout.h, 0, 0, cutout.w, cutout.h);
+    if (closed) ctx.drawImage(closedShopArt, shop.sx, shop.sy, shop.w, shop.h,
+      shop.x - cutout.x, shop.y - cutout.y, shop.w, shop.h);
+    ctx.restore();
+  }
 
   function paintShopFronts(force) {
     if (!courtyard || !closedShopArt) return;
@@ -773,6 +871,8 @@
         bc.drawImage(closedShopArt, shop.sx, shop.sy, shop.w, shop.h, x, y, w, h);
         if (shop.id === 'stall') drawPostSilhouettes(bc);
       }
+      var cutout = foreground.find(function (part) { return part.shop === shop; });
+      if (cutout) paintFurniture(cutout);
     });
   }
   var NIGHT = 0.72;                // плотность темноты ночью
@@ -954,7 +1054,9 @@
       // Изображение и точки взаимодействия растягиваются в одних и тех же долях игрового поля.
       bc.drawImage(courtyard, 0, 0, W, H);
       refreshPostLayer();
+      foreground.forEach(paintFurniture);
       paintShopFronts(true);
+      paintEntrance(true);
       // Границы стёкол фасада на исходном холсте 1808×870. Рамы и снег остаются поверх света.
       var glazed = [[29, 24, 50, 56, 78, 80], [200, 24, 221, 228, 252, 80],
         [303, 24, 322, 330, 353, 77], [498, 21, 519, 526, 552, 78],
@@ -1277,12 +1379,19 @@
     if (field.clientWidth !== W || field.clientHeight !== H) resize();
     if (!W) return;
     paintShopFronts(false);
+    paintEntrance(false);
     if (postLayer) {
-      if (postLayer.parentNode !== tiles) tiles.appendChild(postLayer);
+      if (postLayer.parentNode !== tiles) {
+        tiles.appendChild(postLayer);
+        foreground.forEach(function (cutout) { tiles.appendChild(cutout.canvas); });
+      }
       for (var child = tiles.firstElementChild; child; child = child.nextElementSibling) {
-        if (child === postLayer) continue;
+        if (!child.classList.contains('tile') && !child.classList.contains('bus')) continue;
         var post = parseFloat(child.style.left) < W * 0.5 ? streetLamps[0] : streetLamps[1];
-        child.classList.toggle('in-front-of-post', parseFloat(child.style.top) >= H * post.footY);
+        var footY = parseFloat(child.style.top) / H;
+        var depth = footY >= post.footY ? 'street' : footY >= 0.796 ? 'pavement' :
+          footY >= 0.518 ? 'yard' : footY >= 0.294 || child.classList.contains('sitting') ? 'path' : 'back';
+        if (child.dataset.depth !== depth) child.dataset.depth = depth;
       }
     }
     var night = field.classList.contains('night');
@@ -1301,8 +1410,13 @@
 
     /* источники света */
     var lights = [];
-    var el = document.getElementById('place-entrance');
-    if (el) { p = centerOf(el, fr); var dOpen = el.classList.contains('door-open'); lights.push({ x: p.x, y: p.y + 10, r: dOpen ? 215 : 135, a: dOpen ? 1 : 0.95, w: dOpen ? 0.34 : 0.13 }); }   // приоткрытая дверь («зайти следом») ночью светит сильнее и дальше
+    var doorEl = document.getElementById('place-entrance');
+    var doorOpen = doorEl && doorEl.classList.contains('door-open');
+    var el;
+    if (doorEl) {
+      p = courtyard ? { x: W * 828 / 1808, y: H * 183 / 870 } : centerOf(doorEl, fr);
+      lights.push({ x: p.x, y: p.y, r: doorOpen ? 174 : 115, a: doorOpen ? 1 : 0.95, w: doorOpen ? 0.17 : 0.10 });
+    }
     el = document.getElementById('place-kiosk');
     if (el) { p = centerOf(el, fr); lights.push({ x: p.x - 6, y: p.y - 8, r: el.classList.contains('closed') ? 100 : 150, a: kioskDim > 0 ? 0.5 : (el.classList.contains('closed') ? 0.8 : 0.95), w: el.classList.contains('closed') ? 0.07 : 0.12 }); }
     /* слабый собственный свет мест: темнота остаётся, но место и подпись находятся сразу */
@@ -1320,6 +1434,7 @@
     if (el) { p = centerOf(el, fr); lights.push({ x: p.x, y: p.y, r: 124, a: 0.45, w: 0 }); }
     /* герой виден всегда; предметы и встречные на земле различимы */
     var heroEl = document.querySelector('.tile.hero');
+    drawHeroGait(heroEl, t);
     if (heroEl) { p = centerOf(heroEl, fr); lights.push({ x: p.x, y: p.y, r: 104, a: 0.62, w: 0.03 }); }
     /* прохожие: своё слабое пятно света, как у героя, но меньше — ночью их видно и типы различимы */
     var walkers = document.querySelectorAll('.tile.walker:not(.gone)');
@@ -1350,7 +1465,7 @@
     /* следы героя: остаются на снегу и асфальте, тают; в метель заметает быстрее. Плюс пунктир к цели маршрута */
     var foot = heroEl ? centerOf(heroEl, fr) : null, wetNow = precip === 'sleet';
     if (foot) {
-      foot.y += 30;
+      foot.y += heroEl.classList.contains('hero-atlas') && !heroEl.classList.contains('asleep') ? heroEl.offsetHeight / 2 : 30;
       if (!lastStep) lastStep = { x: foot.x, y: foot.y };
       var sdx = foot.x - lastStep.x, sdy = foot.y - lastStep.y, sd = Math.sqrt(sdx * sdx + sdy * sdy);
       if (sd > 90) lastStep = { x: foot.x, y: foot.y };
@@ -1419,14 +1534,16 @@
       var L = lights[i], aa = L.w * L.a * (L.fire ? Math.max(0.45, k) : k);
       if (L.w > 0 && aa > 0.004) glow(L.x, L.y, L.r * 0.95, aa, L.fire ? '255,150,60' : '255,184,96');
     }
-    var doorEl = document.getElementById('place-entrance');
-    if (doorEl && k > 0.03 && doorEl.classList.contains('door-open')) {   // приоткрытая дверь: тёплый клин света на землю перед подъездом, чуть дышит
-      var dp = centerOf(doorEl, fr), pl = 0.9 + 0.1 * Math.sin(tNow * 3.1), gx = dp.x - 4, gy = dp.y + 22;
-      var gr = fc.createLinearGradient(0, gy, 0, gy + 130);
-      gr.addColorStop(0, 'rgba(255,208,124,' + (0.55 * k * pl) + ')'); gr.addColorStop(1, 'rgba(255,208,124,0)');
+    if (doorOpen && k > 0.03) {
+      // Полоса тёплого света начинается на пороге, под полотном за наличник не заходит.
+      var dp = centerOf(doorEl, fr);
+      var gx = courtyard ? W * 828 / 1808 : dp.x - 4, gy = courtyard ? H * 230 / 870 : dp.y + 22;
+      var halfGap = courtyard ? W * 14 / 1808 : 12, spill = courtyard ? H * 0.105 : 85;
+      var gr = fc.createLinearGradient(0, gy, 0, gy + spill);
+      gr.addColorStop(0, 'rgba(255,204,127,' + 0.23 * k + ')'); gr.addColorStop(1, 'rgba(255,204,127,0)');
       fc.fillStyle = gr;
-      fc.beginPath(); fc.moveTo(gx - 15, gy); fc.lineTo(gx + 15, gy); fc.lineTo(gx + 62, gy + 130); fc.lineTo(gx - 62, gy + 130); fc.closePath(); fc.fill();
-      glow(dp.x - 4, dp.y + 2, 66, 0.42 * k * pl, '255,214,140');
+      fc.beginPath(); fc.moveTo(gx - halfGap, gy); fc.lineTo(gx + halfGap, gy);
+      fc.lineTo(gx + 3.5 * halfGap, gy + spill); fc.lineTo(gx - 2.5 * halfGap, gy + spill); fc.closePath(); fc.fill();
     }
     if (k > 0.01) drawStreetLighting(k, false);
     fc.globalCompositeOperation = 'source-over';
@@ -1524,6 +1641,13 @@
     bc = bg.getContext('2d'); fc = fx.getContext('2d');
     resize();
     var plate = new Image();
+    var atlas = new Image();
+    atlas.onload = function () {
+      walkAtlasReady = atlas.naturalWidth === 640 && atlas.naturalHeight === 480;
+      if (!walkAtlasReady) field.classList.add('walk-art-unavailable');
+    };
+    atlas.onerror = plate.onerror = function () { field.classList.add('walk-art-unavailable'); };
+    atlas.src = 'hero-walk.webp?v=029';
     plate.onload = function () {
       courtyard = plate;
       if (W && H) drawBg();
@@ -1533,6 +1657,9 @@
     var shutters = new Image();
     shutters.onload = function () { closedShopArt = shutters; if (W && H) paintShopFronts(true); };
     shutters.src = 'shops-closed.webp';
+    var openDoor = new Image();
+    openDoor.onload = function () { openDoorArt = openDoor; if (W && H) paintEntrance(true); };
+    openDoor.src = 'entrance-open.webp?v=028';
     dark = field.classList.contains('night') ? NIGHT : 0;
     window.addEventListener('resize', resize);
     raf = requestAnimationFrame(frame);

@@ -1,5 +1,6 @@
 (function () {
   'use strict';
+  if (document.documentElement.classList.contains('walk-preview')) return;
 
   var start = document.getElementById('start-screen');
   var dialog = document.getElementById('menu-info-dialog');

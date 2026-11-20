@@ -2287,6 +2287,7 @@
   function $(id) { return document.getElementById(id); }
 
   function initUI() {
+    if (document.documentElement.classList.contains('walk-preview')) return;
     var elField = $('field');
     var busEl = null;
     var elPlaces = $('layer-places');
@@ -2709,10 +2710,12 @@
       for (key in barEls) {
         el = barEls[key];
         w = el.offsetWidth + 44;                              // справа ещё счётчик «×N»
-        wo = el.classList.contains('bar-place') ? -84 : -62;
-        obs.push({ l: parseFloat(el.style.left) - el.offsetWidth / 2, r: parseFloat(el.style.left) - el.offsetWidth / 2 + w, t: parseFloat(el.style.top) + wo, b: parseFloat(el.style.top) + wo + el.offsetHeight });
+        var isTalkBar = el.classList.contains('bar-talk');
+        wo = isTalkBar ? -30 : el.classList.contains('bar-place') ? -84 : -62;
+        obs.push({ l: parseFloat(el.style.left) - el.offsetWidth / 2, r: parseFloat(el.style.left) - el.offsetWidth / 2 + w, t: parseFloat(el.style.top) + wo, b: parseFloat(el.style.top) + (isTalkBar ? 0 : wo + el.offsetHeight) });
       }
-      var bottom = py - W.baseOffsetPx, pad = 4, i, hit, tries;
+      var atlasHeight = heroEl.classList.contains('hero-atlas') && !S.hero.asleep ? heroEl.offsetHeight + 8 : 0;
+      var bottom = py - Math.max(W.baseOffsetPx, atlasHeight), pad = 4, i, hit, tries;
       for (tries = 0; tries < 5; tries++) {
         hit = null;
         var rc = { l: px - rw / 2 - pad, r: px + rw / 2 + pad, t: bottom - rh - pad, b: bottom + pad };
@@ -2746,6 +2749,30 @@
       st.fill.style.width = Math.max(0, Math.min(100, v / D.hero.max * 100)) + '%';
       st.val.textContent = String(shown);
       st.box.classList.toggle('low', v < D.hero.lowThreshold);
+    }
+
+    function placeTalkBar(bar, hero, partner) {
+      // Общая подпись беседы находится над графикой двора. На невысоком экране помещаем её ниже собеседников.
+      var half = bar.offsetWidth * .5, w = game.field.w, h = game.field.h;
+      var x = Math.min(w - half - 3, Math.max(half + 3, (hero.x + partner.x) * .5 * w));
+      var heroHeight = heroEl.classList.contains('hero-atlas') ? heroEl.offsetHeight : 62;
+      var y = Math.min(hero.y * h - heroHeight, partner.y * h - 62) - 16;
+      if (y - 30 < $('hud').offsetHeight + 4) {
+        var top = Math.max(hero.y, partner.y) * h + 17;
+        Object.keys(placeEls).forEach(function (id) {
+          var el = placeEls[id], label = el.children[1].getBoundingClientRect();
+          var sub = el.children[2].getBoundingClientRect();
+          var bottom = Math.max(label.bottom, sub.bottom);
+          if (label.right >= x - half && label.left <= x + half && label.top < top + 30 && bottom > top - 8) top = bottom + 5;
+        });
+        y = Math.min(h - 2, top + 30);
+      }
+      bar.style.left = x + 'px'; bar.style.top = y + 'px';
+      var left = hero.x <= partner.x ? D.hero.name : game.npcName(partner);
+      var right = hero.x <= partner.x ? game.npcName(partner) : D.hero.name;
+      var names = bar.children[2];
+      if (names.firstChild.textContent !== left) names.firstChild.textContent = left;
+      if (names.lastChild.textContent !== right) names.lastChild.textContent = right;
     }
 
     function render() {
@@ -2792,8 +2819,17 @@
         el.children[2].textContent = sub;
       }
 
+      /* У разговаривающих есть свои игровые координаты. Если они совпали, в кадре разводим собеседников. */
+      var partner = S.hero.task && S.hero.task.kind === 'talk' ? game.findNpc(S.hero.task.npcId) : null;
+      var heroShift = 0;
+      if (partner && Math.abs(S.hero.y - partner.y) * game.field.h < 64) {
+        var gap = (S.hero.x - partner.x) * game.field.w;
+        heroShift = (gap <= 0 ? -1 : 1) * Math.max(0, (76 - Math.abs(gap)) * 0.5);
+      }
       /* герой */
       place(heroEl, S.hero.x, S.hero.y);
+      heroEl.style.marginLeft = heroShift ? heroShift + 'px' : '';
+      heroEl.classList.toggle('talking', !!partner);
       heroEl.classList.toggle('busy', !!S.hero.task);
       heroEl.classList.toggle('asleep', !!S.hero.asleep);
       heroEl.classList.toggle('walking', !!S.hero.walking);      // по этим классам art.css рисует шаг и поворот
@@ -2828,7 +2864,8 @@
         var hintText = Wk.actionKey + ' — ' + nb.label;
         if (elActHint.textContent !== hintText) elActHint.textContent = hintText;
         elActHint.classList.toggle('for-place', nb.kind === 'place');
-        elActHint.style.left = nbEl.style.left; elActHint.style.top = nbEl.style.top;
+        elActHint.style.left = nbEl.style.left;
+        elActHint.style.top = Math.min(parseFloat(nbEl.style.top), S.hero.y * game.field.h - 18) + 'px';
       }
 
       /* предметы и встречные */
@@ -2880,6 +2917,8 @@
           el.classList.toggle('flip', n.dir === 1);
         }
         var swayK = n.kind && D.npcs.passerby.kinds[n.kind] ? D.npcs.passerby.kinds[n.kind].sway : 0;
+        el.style.marginLeft = partner && n.id === partner.id && heroShift ? -heroShift + 'px' : '';
+        el.classList.toggle('talking', !!partner && n.id === partner.id);
         if (swayK && n.walking) place(el, n.x + Math.sin(n.x * 90 + n.id) * swayK * 0.3, n.y + Math.sin(n.x * 55 + n.id * 1.7) * swayK);   // подвыпивший идёт нетвёрдо — только вид, логика идёт по прямой
         else place(el, n.x, n.y);
       }
@@ -2923,6 +2962,15 @@
         }
         el.style.left = (pos.x * game.field.w) + 'px';
         el.style.top = (pos.y * game.field.h) + 'px';
+        var talkBar = partner && b.anchor.kind === 'npc' && b.anchor.id === partner.id;
+        el.classList.toggle('bar-talk', !!talkBar);
+        if (talkBar) {
+          if (!el.children[2]) {
+            var names = document.createElement('span');
+            names.className = 'talk-names'; names.innerHTML = '<span></span><span></span>'; el.appendChild(names);
+          }
+          placeTalkBar(el, S.hero, partner);
+        }
         el.classList.toggle('bar-place', b.anchor.kind === 'place');
         el.children[0].style.width = Math.max(0, Math.min(100, b.p * 100)) + '%';
         el.children[1].textContent = b.count && b.count > 1 ? '×' + b.count : '';
@@ -3220,7 +3268,8 @@
       elStash.classList.toggle('drop', !!(on && invDrag && invDrag.moved));
       if (!on) return;
       var P = D.places.den;
-      place(elStash, P.x + 0.055, P.y - 0.02);
+      elStash.style.left = ((P.x + 0.055) * 100) + '%';
+      elStash.style.top = ((P.y - 0.02) * 100) + '%';
       var box = elStash.children[1];
       box.innerHTML = '';
       for (var i = 0; i < cap; i++) {
