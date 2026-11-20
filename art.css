@@ -785,16 +785,6 @@ body { background: #0b0f14; }
   background: linear-gradient(90deg, #3e3229 0 15%, #8c704d 23%, #e1bd81 57%, #694e33 62%, #513f31 93%);
   box-shadow: 0 0 8px rgba(255,194,99,.45);
 }
-.painted-courtyard .place-kiosk.closed::before, .painted-courtyard .place-recycle.closed::before {
-  background: repeating-linear-gradient(#615e52 0 3px, #414341 4px, #777265 5px); box-shadow: inset 0 0 5px #303331;
-}
-.painted-courtyard .place-kiosk.closed::before { left: 14%; top: 28%; width: 59%; height: 31%; }
-.painted-courtyard .place-recycle.closed::before { left: 32%; top: 29%; width: 27%; height: 31%; }
-.painted-courtyard .place-stall.closed::before {
-  left: 9%; top: 19%; width: 79%; height: 52%;
-  clip-path: polygon(3% 0, 96% 0, 100% 94%, 89% 98%, 78% 92%, 65% 99%, 50% 92%, 36% 99%, 25% 93%, 14% 99%, 0 95%);
-  background: repeating-linear-gradient(82deg, #615e51 0%, #77705d 8%, #59584d 11%, #726c58 18%);
-}
 .painted-courtyard .tile.hero, .painted-courtyard .tile.npc {
   margin-top: -18px; /* координата актёра обозначает место, на котором он стоит */
 }

@@ -750,6 +750,27 @@
    * ===================================================================== */
   var field, bg, fx, bc, fc, frostCv = null, W = 0, H = 0, raf = 0, lastT = 0;
   var courtyard = null;
+  var closedShopArt = null;
+  // Координаты фрагмента в атласе, размеры и положение на рисунке двора 1808×870.
+  var shopFronts = [
+    { id: 'stall', sx: 0, sy: 0, w: 360, h: 178, x: 790, y: 282 },
+    { id: 'kiosk', sx: 0, sy: 178, w: 220, h: 144, x: 392, y: 554 },
+    { id: 'recycle', sx: 224, sy: 178, w: 100, h: 85, x: 1282, y: 566 }
+  ];
+
+  function paintShopFronts(force) {
+    if (!courtyard || !closedShopArt) return;
+    shopFronts.forEach(function (shop) {
+      var el = document.getElementById('place-' + shop.id);
+      var closed = !!el && el.classList.contains('closed');
+      if (!force && closed === shop.closed) return;
+      shop.closed = closed;
+      var x = shop.x * W / courtyard.width, y = shop.y * H / courtyard.height;
+      var w = shop.w * W / courtyard.width, h = shop.h * H / courtyard.height;
+      bc.drawImage(courtyard, shop.x, shop.y, shop.w, shop.h, x, y, w, h);
+      if (closed) bc.drawImage(closedShopArt, shop.sx, shop.sy, shop.w, shop.h, x, y, w, h);
+    });
+  }
   var NIGHT = 0.72;                // плотность темноты ночью
   var dark = 0;
   var windows = [], winTimer = 0, houseH = 0, houseW = 0, roadY = 0;
@@ -897,6 +918,7 @@
     if (courtyard) {
       // Изображение и точки взаимодействия растягиваются в одних и тех же долях игрового поля.
       bc.drawImage(courtyard, 0, 0, W, H);
+      paintShopFronts(true);
       // Границы стёкол фасада на исходном холсте 1808×870. Рамы и снег остаются поверх света.
       var glazed = [[29, 24, 50, 56, 78, 80], [200, 24, 221, 228, 252, 80],
         [303, 24, 322, 330, 353, 77], [498, 21, 519, 526, 552, 78],
@@ -1204,6 +1226,7 @@
     lastT = t; tNow += dt;
     if (field.clientWidth !== W || field.clientHeight !== H) resize();
     if (!W) return;
+    paintShopFronts(false);
     var night = field.classList.contains('night');
     if (!weatherEl) weatherEl = document.getElementById('weather');
     var wind = weatherEl ? Math.min(2, +weatherEl.dataset.wind || 0) : 0;
@@ -1456,6 +1479,9 @@
       field.classList.add('painted-courtyard');
     };
     plate.src = 'courtyard.webp?v=024';
+    var shutters = new Image();
+    shutters.onload = function () { closedShopArt = shutters; if (W && H) paintShopFronts(true); };
+    shutters.src = 'shops-closed.webp';
     dark = field.classList.contains('night') ? NIGHT : 0;
     window.addEventListener('resize', resize);
     raf = requestAnimationFrame(frame);
