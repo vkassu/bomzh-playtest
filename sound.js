@@ -189,6 +189,16 @@
 
     /* Раз в кадр: снимок состояния игры -> погодный фон, шаги, костёр, бак */
     E.tick = function (dt, s) {
+      if (s.over) {
+        if (s.over !== lastOver) {
+          set(amb.gain, 0, 0.04);
+          set(fireBus.gain, 0, 0.04);
+          play(s.over);
+        }
+        lastOver = s.over;
+        return;
+      }
+      lastOver = null;
       var W = CFG.wind[Math.min(2, s.wind || 0)], bl = s.type === 'blizzard';
       var k = Math.min(1, dt / (CFG.transitionSeconds / 3));           // смена погоды — плавно, за transitionSeconds
       var tg = W.gain * (bl ? CFG.blizzard.gainMult : 1), th = W.howl * (bl ? CFG.blizzard.howlMult : 1);
@@ -242,7 +252,6 @@
         if (timers.crackle <= 0) { timers.crackle = rnd(0.3, 1.8) / CFG.fire.cracklesPerSecond; play('crackle', { k: 1 }); }
       }
       hadFire = !!s.fire;
-      if (s.over !== lastOver) { lastOver = s.over; if (s.over === 'win') play('win'); else if (s.over === 'lose') play('lose'); }
     };
   }
 
@@ -261,8 +270,9 @@
   function away() { return !!document.hidden || blurred; }
   function applyLevel() {
     if (!engine) return;
-    var v = prefs.on && !away() ? prefs.vol : 0;
-    engine.user.gain.setTargetAtTime(v, ctx.currentTime, 0.08);
+    var v = prefs.on && !away() && lastSnap && !lastSnap.paused ? prefs.vol : 0;
+    if (v) engine.user.gain.setTargetAtTime(v, ctx.currentTime, 0.08);
+    else engine.user.gain.setValueAtTime(0, ctx.currentTime);
   }
   function unlock() {
     try {
@@ -279,12 +289,14 @@
   api.setEnabled = function (v) { prefs.on = !!v; save(); applyLevel(); syncUi(); if (prefs.on && engine && on('ui')) engine.play('tick'); };
   api.setVolume = function (v) { prefs.vol = Math.max(0, Math.min(1, v)); if (prefs.vol > 0 && !prefs.on) prefs.on = true; save(); applyLevel(); syncUi(); };
   api.frame = function (snap, events) {
+    var pauseChanged = !lastSnap || lastSnap.paused !== snap.paused;
     lastSnap = snap;
-    if (!engine || ctx.state !== 'running') return;
+    if (pauseChanged) applyLevel();
+    if (!engine || ctx.state !== 'running' || away() || snap.paused) return;
     var now = ctx.currentTime, dt = Math.min(0.1, lastT ? now - lastT : 0.016);
     lastT = now;
     engine.tick(dt, snap);
-    for (var i = 0; i < events.length; i++) engine.event(events[i], snap.paused);
+    if (!snap.over) for (var i = 0; i < events.length; i++) engine.event(events[i], false);
   };
   api.debug = function () {
     return {
