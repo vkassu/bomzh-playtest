@@ -597,22 +597,7 @@
       '<path d="M22 17.5h20l3 3.5H19z" fill="#12161a"/>' +
       '<circle cx="32" cy="9.5" r="1.8" fill="#c9b458"/>' +
       '<path d="M28 24h8" stroke="#12161a" stroke-width="1.5"/>'); },
-    /* автобус, 220x80, едет вправо; окна тёмные, без пассажиров. Тёплые только фары */
-    'bus': function () { return svg(220, 80,
-      sh(110, 73, 100, 5) +
-      '<rect x="6" y="8" width="206" height="56" rx="9" fill="#9fb4c2"' + O + '/>' +
-      '<path d="M7 44h204v11q0 9-9 9H16q-9 0-9-9z" fill="#4f6a7c"/>' +
-      '<path d="M7 40h204" stroke="#e3ecf1" stroke-width="3"/>' +
-      '<rect x="6" y="8" width="206" height="56" rx="9" fill="none"' + O + '/>' +
-      '<path d="M16 16h28v20H16zM50 16h28v20H50zM84 16h28v20H84zM118 16h28v20h-28zM152 16h24v20h-24z" fill="#1b2630"' + O + '/>' +
-      '<path d="M19 33l12-15M54 33l12-15M88 33l12-15M122 33l12-15M155 33l10-13" stroke="#3d5567" stroke-width="2.5"/>' +
-      '<path d="M182 14h24q4 0 4 5v19h-28z" fill="#22303c"' + O + '/><path d="M186 35l12-18" stroke="#46627a" stroke-width="2.5"/>' +
-      '<rect x="150" y="9.5" width="34" height="5" rx="1" fill="#cfe6ff"/>' +
-      '<rect x="205" y="47" width="8" height="7" rx="2" fill="#ffd98a"' + O + '/>' +
-      '<rect x="5" y="47" width="5" height="6" rx="1.5" fill="#a8362c"/>' +
-      '<path d="M2 60h216" stroke="#12161a" stroke-width="3"/>' +
-      '<circle cx="48" cy="63" r="11" fill="#15191d"' + O + '/><circle cx="48" cy="63" r="4.5" fill="#6b7680"/>' +
-      '<circle cx="168" cy="63" r="11" fill="#15191d"' + O + '/><circle cx="168" cy="63" r="4.5" fill="#6b7680"/>'); },
+    'bus': function () { return 'url("courtyard-bus.png")'; },
     /* остановка, 120x88: павильон со скамейкой и табличкой */
     'decor:busstop': function () { return svg(120, 88,
       sh(56, 82, 48, 5) +
@@ -738,6 +723,51 @@
    * ===================================================================== */
   var field, bg, fx, bc, fc, frostCv = null, W = 0, H = 0, raf = 0, lastT = 0;
   var courtyard = null;
+  var catPupils, catTail;
+  // Центральная створка широкого окна справа от подъезда на фоне 1808×870.
+  var catPane = { x: 1308, y: 47, w: 36, h: 38 };
+
+  function mountWindowCat() {
+    var cat = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    cat.id = 'window-cat';
+    cat.setAttribute('aria-hidden', 'true');
+    cat.setAttribute('viewBox', '0 0 36 38');
+    cat.setAttribute('preserveAspectRatio', 'none');
+    Object.assign(cat.style, {
+      position: 'absolute', pointerEvents: 'none', overflow: 'hidden',
+      left: (100 * catPane.x / courtyard.width) + '%', top: (100 * catPane.y / courtyard.height) + '%',
+      width: (100 * catPane.w / courtyard.width) + '%', height: (100 * catPane.h / courtyard.height) + '%'
+    });
+    cat.innerHTML =
+      '<defs><linearGradient id="window-cat-fur" x2=".78" y2="1">' +
+        '<stop stop-color="#69635f"/><stop offset=".48" stop-color="#4d4948"/><stop offset="1" stop-color="#302f34"/>' +
+      '</linearGradient></defs>' +
+      '<g opacity=".92">' +
+        '<path class="cat-tail" fill="none" stroke="#4e4947" stroke-width="3" stroke-linecap="round"/>' +
+        '<path fill="url(#window-cat-fur)" stroke="#35353a" stroke-width=".65" d="M6 37 Q3 33 5 26 Q6 21 10 20 Q8 18 8 15 L7.2 7.2 Q9.6 7.6 13.3 11 Q16 10 19 11 L23 6.8 L22.7 15 Q23.2 18.8 20.8 21 Q22.7 24 23.3 27.8 Q25.5 29.5 26 34.8 Q26.6 37.4 23.6 38 L7 38Z"/>' +
+        '<path fill="#81716c" opacity=".6" d="M8.6 9.3L11.5 12L9 13.2ZM20.3 12L22.1 9L21.9 13.5Z"/>' +
+        '<path fill="#8d8278" opacity=".36" d="M10 18.1Q13.6 19.2 14.6 20.5Q15.8 19 19.9 18Q19.6 21 16.2 22.6L15.2 24L14.5 22.7L13.3 23L13.2 21.8Q11.3 21.1 10 18.1Z"/>' +
+        '<path fill="none" stroke="#8c8176" stroke-width=".55" opacity=".6" d="M7 27Q10 23 13 26 M10 35Q12 33 13 29 M17 26Q16 31 16.8 36L18 36.5 M20 28Q19.8 33 20 36L21.2 36.5"/>' +
+        '<path fill="none" stroke="#2e3033" stroke-width=".8" opacity=".62" d="M13 11.6L13.8 13.6M15.4 11.4L15.7 13.1M17.2 11.4L16.8 13.5M7.7 29Q9.2 27.5 11.8 28M7.2 31Q8.5 29.7 10.4 30"/>' +
+        '<path fill="#ada57b" d="M9.7 16.1Q12 14.4 14.1 16Q12.3 18.2 9.7 16.1ZM16.5 16Q18.8 14.2 21.1 15.6Q19.6 17.8 16.5 16Z"/>' +
+        '<g class="cat-pupils" fill="#272b2c"><ellipse cx="12" cy="16.2" rx=".55" ry=".95"/><ellipse cx="18.8" cy="15.95" rx=".55" ry=".95"/></g>' +
+        '<path fill="#9a8179" d="M14 18.2L16.3 18L15.3 19.4Z"/>' +
+        '<path stroke="#a3978b" opacity=".56" fill="none" stroke-width=".45" d="M12.4 18.9L6.9 18.3M12.3 19.8L7.6 20.5M17.4 18.5L23.3 17.4M17.5 19.2L23 19.4"/>' +
+      '</g><path fill="#b8c7ce" opacity=".055" d="M5 0H8L2 38H0ZM21 0H22L16 38H14.5Z"/>';
+    field.insertBefore(cat, stepsCv);
+    catPupils = cat.querySelector('.cat-pupils');
+    catTail = cat.querySelector('.cat-tail');
+  }
+
+  function animateWindowCat(hero, time) {
+    if (!catTail || !hero) return;
+    var dx = parseFloat(hero.style.left) - W * (catPane.x + 15) / courtyard.width;
+    var dy = parseFloat(hero.style.top) - H * (catPane.y + 16) / courtyard.height;
+    var length = Math.hypot(dx, dy) || 1;
+    catPupils.setAttribute('transform', 'translate(' + (dx / length * 1.1) + ' ' + (dy / length * .45) + ')');
+    var sway = Math.sin(time * .0014) * 2.1;
+    catTail.setAttribute('d', 'M23 35 Q31 37 30 30 C29 26 ' + (30 + sway) + ' 25 ' + (32 + sway) + ' 23');
+  }
   var walkAtlasReady = false, npcAtlasReady = false;
   var actorGaits = new WeakMap();
   // Порядок трёхракурсных полос в npc-walk.webp. Последняя строка — бабушка на лавке.
@@ -799,8 +829,25 @@
   var postMask = null, postLayer = null, tiles = null;
   var closedShopArt = null;
   var openDoorArt = null, doorWasOpen = null;
+  var binPatch = { x: 1528, y: 46, image: null };
+  var benchPatch = { x: 920, y: 110, image: null,
+    outline: 'M61 110L61 105Q62 102 66 101Q71 99 78 102Q87 100 96 101Q106 98 113 101Q130 100 141 101Q154 98 160 100Q166 100 171 99Q176 99 177 104L177 110Z M61 112H177V116.6H61Z M69 109H73V121H69Z M163 109H166V121H163Z M62 122Q69 119 75 120L165 120Q174 118 176 122L180 126Q182 129 180 130H60L59.5 127Z M68 129H72V147.5H68Z M72 129H74V142H72Z M162 129H166V141H162Z M171 129H175V148H171Z' };
   // Левый верхний угол фрагмента в координатах иллюстрации 1808×870.
   var doorPatch = { x: 795, y: 126 };
+
+  function paintBin() {
+    if (!courtyard || !binPatch.image) return;
+    var sx = W / courtyard.width, sy = H / courtyard.height;
+    bc.drawImage(binPatch.image, binPatch.x * sx, binPatch.y * sy,
+      binPatch.image.width * sx, binPatch.image.height * sy);
+  }
+
+  function paintBench() {
+    if (!courtyard || !benchPatch.image) return;
+    var sx = W / courtyard.width, sy = H / courtyard.height;
+    bc.drawImage(benchPatch.image, benchPatch.x * sx, benchPatch.y * sy,
+      benchPatch.image.width * sx, benchPatch.image.height * sy);
+  }
 
   function paintEntrance(force) {
     if (!courtyard || !openDoorArt) return;
@@ -825,17 +872,26 @@
     { id: 'recycle', sx: 224, sy: 178, w: 100, h: 85, x: 1282, y: 566 }
   ];
   // Отдельные вырезы с картинки закрывают часть персонажа, когда он стоит за мебелью.
-  var benchFront = { id: 'bench', x: 960, y: 155, w: 170, h: 114,
+  var benchFront = { id: 'bench', x: 960, y: 155, w: 170, h: 114, patch: benchPatch,
     outline: 'M14 25 Q17 14 31 18 Q40 14 53 18 Q60 14 74 18 L95 16 Q102 12 112 16 Q139 9 143 23 L143 52 L132 53 L132 58 L143 59 L154 71 L153 77 L144 77 L143 100 L137 102 L135 77 L40 77 L38 102 L31 102 L31 78 L27 85 L27 77 L18 77 L15 64 L18 60 L28 59 L28 53 L15 53 Z' };
   var tableFront = { id: 'table', x: 790, y: 282, w: 360, h: 178,
     shop: shopFronts[0],
-    outline: 'M125 121 L136 119 Q139 109 162 114 Q169 107 175 115 L186 117 Q194 107 214 113 L225 116 Q230 109 241 113 L250 116 Q257 105 280 111 L288 116 L304 129 L307 164 L301 165 L299 135 L284 136 L282 166 L277 166 L276 137 L193 140 L192 171 L187 172 L186 141 L143 142 L139 173 L135 174 L135 143 L129 143 L128 164 L125 165 Z',
+    outline: 'M33 42 Q51 40 69 32 Q88 24 103 15 Q110 12 118 16 Q154 27 181 20 Q198 17 214 9 Q222 6 234 10 Q254 13 282 8 Q290 5 295 15 L306 39 L308 50 L307 153 L303 161 L298 129 L286 122 L131 125 L124 151 L96 156 L91 164 L70 158 L70 145 L46 151 L45 157 L38 161 L39 58 Z ' +
+      'M33 49 L37 57 L20 115 L17 136 L10 137 L9 118 L16 112 L23 88 Z M306 44 L310 43 L329 117 L325 119 Z M318 119 L325 110 Q330 105 343 110 Q352 110 354 121 L352 142 L327 146 L320 142 Z ' +
+      'M125 121 L136 119 Q139 109 162 114 Q169 107 175 115 L186 117 Q194 107 214 113 L225 116 Q230 109 241 113 L250 116 Q257 105 280 111 L288 116 L304 129 L307 164 L301 165 L299 135 L284 136 L282 166 L277 166 L276 137 L193 140 L192 171 L187 172 L186 141 L143 142 L139 173 L135 174 L135 143 L129 143 L128 164 L125 165 Z',
     closedOutline: 'M14 137 L34 41 Q76 35 109 14 Q170 31 212 8 Q242 13 286 6 L310 40 L329 126 L343 159 L325 163 L319 170 Q163 179 44 169 L25 169 Z' };
   var kioskFront = { id: 'kiosk-front', x: 380, y: 485, w: 245, h: 218, shop: shopFronts[1],
     outline: 'M15 60 Q14 45 34 42 Q49 37 72 41 L71 31 Q69 16 83 16 Q124 9 170 14 Q188 14 188 34 L185 42 Q212 40 218 48 L230 73 L228 81 L229 178 L221 183 L220 196 Q196 209 168 202 L65 203 L64 196 Q45 191 36 198 L35 186 L18 178 Z' };
   var recycleFront = { id: 'recycle-front', x: 1196, y: 495, w: 274, h: 209, shop: shopFronts[2],
     outline: 'M25 42 Q26 24 36 19 Q89 15 123 19 Q166 12 216 18 Q228 21 229 43 L226 69 L226 123 L230 121 L233 126 L237 124 L242 120 L245 131 L250 120 L258 141 L262 146 L261 190 L249 192 L243 187 L228 188 L208 195 L199 192 L195 188 Q151 197 117 191 L91 192 L82 188 L77 196 L59 191 L47 195 L33 191 L22 193 L21 156 Q20 145 30 144 L28 68 Z' };
-  var foreground = [benchFront, tableFront, kioskFront, recycleFront];
+  // Сохраняем прорези стёкол между перекладинами и стойками.
+  var stopFront = { id: 'bus-stop-front', x: 800, y: 598, w: 230, h: 170,
+    outline: 'M15 43 Q16 35 20 30 Q21 22 27 19 Q37 14 48 17 Q59 14 70 16 Q85 19 97 16 Q111 12 122 17 Q134 18 147 17 Q155 13 164 16 Q174 15 183 17 Q191 13 200 18 Q207 19 209 28 Q212 32 213 42 L212 49 L17 49 Z ' +
+      'M23 48 H31 V148 L33 153 L23 155 L21 152 L23 145 Z M34 49 H40 V141 L35 144 L34 139 Z M197 48 H207 V154 L198 156 L196 153 Z M190 49 H196 V143 H191 Z ' +
+      'M89 49 H95 V116 H89 Z M144 49 H149 V116 H144 Z M39 105 H192 V110 H39 Z M30 126 H199 V132 H30 Z ' +
+      'M45 121 Q45 117 51 116 H182 Q190 116 189 123 L186 126 H46 Z M51 125 H56 V147 H51 Z M89 125 H94 V146 H89 Z M144 125 H149 V145 H144 Z M176 125 H182 V148 H176 Z' };
+  var foregroundOccluders = [tableFront, kioskFront, recycleFront, stopFront];
+  var foreground = [benchFront].concat(foregroundOccluders);
 
   function paintFurniture(cutout) {
     if (!cutout.canvas) {
@@ -853,13 +909,31 @@
     var ctx = cutout.canvas.getContext('2d');
     var shop = cutout.shop;
     var closed = shop && closedShopArt && shop.closed;
+    var replacement = cutout.patch && cutout.patch.image ? cutout.patch : null;
     ctx.clearRect(0, 0, cutout.w, cutout.h);
     ctx.save();
-    ctx.clip(new Path2D(closed && cutout.closedOutline || cutout.outline));
-    ctx.drawImage(courtyard, cutout.x, cutout.y, cutout.w, cutout.h, 0, 0, cutout.w, cutout.h);
-    if (closed) ctx.drawImage(closedShopArt, shop.sx, shop.sy, shop.w, shop.h,
-      shop.x - cutout.x, shop.y - cutout.y, shop.w, shop.h);
+    if (replacement) {
+      ctx.translate(replacement.x - cutout.x, replacement.y - cutout.y);
+      ctx.clip(new Path2D(replacement.outline));
+      ctx.drawImage(replacement.image, 0, 0);
+    } else {
+      cutout.mask = new Path2D(closed && cutout.closedOutline || cutout.outline);
+      ctx.clip(cutout.mask);
+      ctx.drawImage(courtyard, cutout.x, cutout.y, cutout.w, cutout.h, 0, 0, cutout.w, cutout.h);
+      if (closed) ctx.drawImage(closedShopArt, shop.sx, shop.sy, shop.w, shop.h,
+        shop.x - cutout.x, shop.y - cutout.y, shop.w, shop.h);
+    }
     ctx.restore();
+  }
+
+  function foregroundCoversPoint(clientX, clientY, footY) {
+    return foregroundOccluders.some(function (part) {
+      if (!part.mask || footY >= part.frontY) return false;
+      var r = part.canvas.getBoundingClientRect();
+      if (clientX < r.left || clientX >= r.right || clientY < r.top || clientY >= r.bottom) return false;
+      return part.canvas.getContext('2d').isPointInPath(part.mask,
+        (clientX - r.left) * part.w / r.width, (clientY - r.top) * part.h / r.height);
+    });
   }
 
   function paintShopFronts(force) {
@@ -1009,6 +1083,62 @@
      Над коробом снег тает, вокруг — мокрый асфальт; из щелей между плитами зимой идёт пар (heatVents → frame).
      Места «Теплотрасса» и «Лежбище» (data.js) стоят на коробе, их спрайты рисуют вскрытую плиту и лаз. */
   var heatVents = [];
+  // Полоса бесшовного шума движется вверх внутри расширяющейся струи.
+  // Кадры рисуем один раз; в цикле двора остаётся по одному drawImage на щель.
+  var steamFrames;
+  function makeSteamFrames() {
+    var frames = [], grid = [], random = 3719;
+    for (var i = 0; i < 256; i++) {
+      random = (Math.imul(random, 1664525) + 1013904223) >>> 0;
+      grid.push(random / 4294967296);
+    }
+    function noise(x, y) {
+      var ix = Math.floor(x), iy = Math.floor(y), u = x - ix, v = y - iy;
+      u *= u * (3 - 2 * u); v *= v * (3 - 2 * v);
+      var row = (iy & 15) * 16, next = ((iy + 1) & 15) * 16;
+      var l = ix & 15, r = (ix + 1) & 15;
+      return (grid[row+l]*(1-u) + grid[row+r]*u)*(1-v) + (grid[next+l]*(1-u) + grid[next+r]*u)*v;
+    }
+    for (var frame = 0; frame < 48; frame++) {
+      var canvas = document.createElement('canvas');
+      canvas.width = 64; canvas.height = 80;
+      var ctx = canvas.getContext('2d'), pixels = ctx.createImageData(64, 80);
+      var phase = frame / 48, angle = phase * 2 * Math.PI;
+      for (var y = 0; y < 80; y++) {
+        var h = (79 - y) / 79, drift = h * (8 * Math.sin(h*8-angle) + 4*Math.sin(h*13-2*angle));
+        for (var x = 0; x < 64; x++) {
+          var billow = noise(x/11, y/10 + phase*16);
+          var curl = noise(x/6 + billow*2, y/5 + phase*32);
+          var offset = (x - 32 - drift - (billow-.5)*13*h) / (2.8 + 13*h);
+          var density = Math.exp(-offset*offset*1.55) * Math.pow(1-h, .8) * Math.min(1,h*35);
+          var alpha = density * (60 + 170*billow) * (.35 + .65*curl);
+          var p = (y*64+x)*4;
+          pixels.data[p] = 224; pixels.data[p+1] = 229; pixels.data[p+2] = 232; pixels.data[p+3] = alpha;
+        }
+      }
+      ctx.putImageData(pixels, 0, 0);
+      frames.push(canvas);
+    }
+    return frames;
+  }
+  function drawVentSteam(wind, darkness) {
+    if (!heatVents.length) return;
+    if (!steamFrames) steamFrames = makeSteamFrames();
+    var scale = Math.min(W/1500, H/750);
+    heatVents.forEach(function (vent, i) {
+      var pulse = Math.sin(tNow * .85 + i * 2.3);
+      var height = (49 + Math.min(vent.w/scale, 48)*.7 + 5*pulse) * scale;
+      var width = height * .78;
+      var lean = (.12 + wind*.55) * (1 + .14*Math.sin(tNow + i));
+      var frame = Math.floor(tNow*(10+i*.6) + i*13) % steamFrames.length;
+      fc.save();
+      fc.translate(vent.x, vent.y);
+      fc.transform(1, 0, -lean, wind === 2 ? .76 : 1, 0, 0);
+      fc.globalAlpha = (.81 + .13*pulse) * (1 - .28*darkness);
+      fc.drawImage(steamFrames[frame], -width/2, -height, width, height);
+      fc.restore();
+    });
+  }
   function drawHeatMain(c, r) {
     var P = (window.GAME_DATA && window.GAME_DATA.places) || {}, px = P.pipe ? P.pipe.x : 0.09;
     var bw = W < 1200 ? 36 : 44, cx = W * px, x0 = cx - bw / 2, y0 = houseH - 4, yb = H * 0.8, th = 30, i, y, x;
@@ -1058,6 +1188,8 @@
     if (courtyard) {
       // Изображение и точки взаимодействия растягиваются в одних и тех же долях игрового поля.
       bc.drawImage(courtyard, 0, 0, W, H);
+      paintBin();
+      paintBench();
       refreshPostLayer();
       foreground.forEach(paintFurniture);
       paintShopFronts(true);
@@ -1392,10 +1524,13 @@
       }
       for (var child = tiles.firstElementChild; child; child = child.nextElementSibling) {
         if (!child.classList.contains('tile') && !child.classList.contains('bus')) continue;
-        var post = parseFloat(child.style.left) < W * 0.5 ? streetLamps[0] : streetLamps[1];
+        var x = parseFloat(child.style.left) / W;
+        var post = x < 0.5 ? streetLamps[0] : streetLamps[1];
+        var shop = x < 0.5 ? kioskFront : recycleFront;
         var footY = parseFloat(child.style.top) / H;
-        var depth = footY >= post.footY ? 'street' : footY >= 0.796 ? 'pavement' :
-          footY >= 0.518 ? 'yard' : footY >= 0.294 || child.classList.contains('sitting') ? 'path' : 'back';
+        var streetY = x >= stopFront.depthLeft && x <= stopFront.depthRight ? stopFront.frontY : post.footY;
+        var depth = footY >= streetY ? 'street' : footY >= shop.frontY ? 'pavement' :
+          footY >= tableFront.frontY ? 'yard' : footY >= 0.294 || child.classList.contains('sitting') ? 'path' : 'back';
         if (child.dataset.depth !== depth) child.dataset.depth = depth;
       }
     }
@@ -1439,6 +1574,7 @@
     if (el) { p = centerOf(el, fr); lights.push({ x: p.x, y: p.y, r: 124, a: 0.45, w: 0 }); }
     /* герой виден всегда; предметы и встречные на земле различимы */
     var heroEl = document.querySelector('.tile.hero');
+    animateWindowCat(heroEl, t);
     drawActorGait(heroEl, t, true);
     var people = tiles.querySelectorAll('.walker:not(.gone), .npc-cop:not(.gone)');
     for (i = 0; i < people.length; i++) drawActorGait(people[i], t, false);
@@ -1455,7 +1591,15 @@
     if (el) {                               // автобус: салон виден, фары светят вперёд
       p = centerOf(el, fr);
       lights.push({ x: p.x, y: p.y, r: 150, a: 0.8, w: 0.03 });
-      lights.push({ x: p.x + 150, y: p.y + 12, r: 170, a: 0.9, w: 0.2 });
+      lights.push({ x: p.x - el.offsetWidth * 0.58, y: p.y + el.offsetHeight * 0.17, r: 170, a: 0.9, w: 0.2 });
+    }
+    el = document.getElementById('road-traffic');
+    if (el) {
+      p = centerOf(el, fr);
+      var isBus = el.dataset.kind === 'bus';
+      if (isBus) lights.push({ x: p.x, y: p.y, r: 150, a: 0.8, w: 0.03 });
+      lights.push({ x: p.x + Number(el.dataset.dir) * el.offsetWidth * 0.58, y: p.y + el.offsetHeight * 0.17,
+        r: isBus ? 170 : 85, a: 0.9, w: 0.2 });
     }
     var small = document.querySelectorAll('.tile.item:not(.item-fire):not(.gone), .tile.npc:not(.walker):not(.gone)');
     for (i = 0; i < small.length && i < 28; i++) {
@@ -1556,15 +1700,7 @@
     fc.globalCompositeOperation = 'source-over';
 
     /* пар: теплотрасса, люк, дыхание героя */
-    el = document.getElementById('place-pipe');
-    if (!courtyard && el && Math.random() < dt * 16) {
-      p = centerOf(el, fr);
-      puffs.push({ x: p.x - 44 + Math.random() * 88, y: p.y - 26, vx: 9 + Math.random() * 12, vy: -16 - Math.random() * 16, t: 0, max: 2.2 + Math.random() * 1.6, r0: 6, r1: 26 + Math.random() * 12, a: 0.2 });
-    }
-    if (heatVents.length && Math.random() < dt * 7) {   // правка 022: пар из щелей между плитами короба
-      var hv = heatVents[Math.floor(Math.random() * heatVents.length)];
-      puffs.push({ x: hv.x - hv.w * 0.3 + Math.random() * hv.w * 0.6, y: hv.y, vx: 4 + Math.random() * 8, vy: -10 - Math.random() * 10, t: 0, max: 1.6 + Math.random() * 1.2, r0: 4, r1: 15 + Math.random() * 8, a: 0.16 });
-    }
+    drawVentSteam(wind, k);
     if (!courtyard && Math.random() < dt * 3) puffs.push({ x: W * 0.57 - 10 + Math.random() * 20, y: H * 0.71 - 4, vx: 8 + Math.random() * 6, vy: -12 - Math.random() * 8, t: 0, max: 2 + Math.random(), r0: 4, r1: 18, a: 0.12 });
     breathT -= dt;
     var hero = document.querySelector('.tile.hero');
@@ -1635,6 +1771,18 @@
     field = document.getElementById('field');
     if (!field) return;
     tiles = document.getElementById('layer-tiles');
+    var blocks = window.GAME_DATA.navigation.blocks;
+    foregroundOccluders.forEach(function (part) {
+      var id = part.shop ? part.shop.id : 'busStop';
+      var box = blocks.find(function (block) { return block.id === id; });
+      part.frontY = box.bottom;
+      if (part === stopFront) {
+        var side = (box.right - box.left) / 2;
+        part.depthLeft = box.left - side;
+        part.depthRight = box.right + side;
+      }
+    });
+    window.BomzhArt = { foregroundCoversPoint: foregroundCoversPoint };
     buildSpriteCss();
     bg = document.createElement('canvas'); bg.id = 'art-bg'; bg.className = 'art-layer';
     fx = document.createElement('canvas'); fx.id = 'art-fx'; fx.className = 'art-layer';
@@ -1660,10 +1808,28 @@
     npcAtlas.src = 'npc-walk.webp';
     plate.onload = function () {
       courtyard = plate;
+      mountWindowCat();
       if (W && H) drawBg();
       field.classList.add('painted-courtyard');
     };
     plate.src = 'courtyard.webp?v=027';
+    var binImage = new Image();
+    binImage.onload = function () {
+      binPatch.image = binImage;
+      field.classList.add('lowered-bin');
+      if (W && H) paintBin();
+    };
+    binImage.src = 'courtyard-bin.png';
+    var benchImage = new Image();
+    benchImage.onload = function () {
+      benchPatch.image = benchImage;
+      field.classList.add('lowered-bench');
+      if (courtyard && W && H) {
+        paintBench();
+        paintFurniture(benchFront);
+      }
+    };
+    benchImage.src = 'courtyard-bench.png';
     var shutters = new Image();
     shutters.onload = function () { closedShopArt = shutters; if (W && H) paintShopFronts(true); };
     shutters.src = 'shops-closed.webp';

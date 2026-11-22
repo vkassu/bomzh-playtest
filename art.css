@@ -13,6 +13,7 @@
 #art-table { z-index: 15; }
 #art-kiosk-front, #art-recycle-front { z-index: 25; }
 #art-posts { z-index: 35; }
+#art-bus-stop-front { z-index: 36; }
 .painted-courtyard [data-depth="path"] { --ground-depth: 10; }
 .painted-courtyard [data-depth="yard"] { --ground-depth: 20; }
 .painted-courtyard [data-depth="pavement"] { --ground-depth: 30; }
@@ -532,21 +533,36 @@ body { background: #0b0f14; }
   filter: grayscale(.75) brightness(.8) drop-shadow(0 4px 2px rgba(0, 0, 0, .45));
 }
 .bus {
-  position: absolute; width: 214px; height: 78px; transform: translate(-50%, -50%);
-  z-index: 3; pointer-events: none;
+  position: absolute; width: auto; height: min(22.8%, 9.85vw); aspect-ratio: 3;
+  /* Нижняя точка шин на 97,4% высоты PNG. Ограничение ширины скрывает автобус за краями маршрута. */
+  transform: translate(-50%, -97.4%); z-index: 3; pointer-events: none;
 }
 .bus-body {
-  display: block; width: 100%; height: 100%; font-size: 60px; line-height: 78px; text-align: center;
+  display: block; width: 100%; height: 100%; font-size: 60px; line-height: 1; text-align: center;
   background: center / contain no-repeat;
-  filter: grayscale(.75) brightness(.8) drop-shadow(0 4px 2px rgba(0, 0, 0, .45));
-  animation: artbus .16s linear infinite alternate;
 }
-.bus.stopped .bus-body { animation-duration: .5s; }
-@keyframes artbus { from { transform: translateY(0); } to { transform: translateY(-1px); } }
+#road-traffic {
+  position: absolute; pointer-events: none; z-index: 43;
+  width: auto; height: min(10.8%, 4.7vw); aspect-ratio: 600 / 215;
+  transform: translate(-50%, -100%);
+}
+#road-traffic[data-dir="1"] { z-index: 45; }
+#road-traffic[data-kind="wagon"] { aspect-ratio: 600 / 220; }
+.traffic-body {
+  display: block; width: 100%; height: 100%;
+  background: center bottom / contain no-repeat;
+}
+#road-traffic[data-kind="sedan"] .traffic-body { background-image: url("courtyard-car-sedan.png"); }
+#road-traffic[data-kind="wagon"] .traffic-body { background-image: url("courtyard-car-wagon.png"); }
+#road-traffic[data-kind="bus"] {
+  width: auto; height: min(22.8%, 9.85vw); aspect-ratio: 3;
+  transform: translate(-50%, -97.4%);
+}
+#road-traffic[data-kind="bus"] .traffic-body { background-image: url("courtyard-bus.png"); }
+#road-traffic[data-dir="1"] .traffic-body { transform: scaleX(-1); }
 @media (max-width: 1100px) {
   .tile.walker .tile-emoji { width: 50px; height: 50px; }
   .decor { width: 92px; height: 68px; }
-  .bus { width: 160px; height: 58px; }
 }
 
 /* ---------- предупреждения над героем, иней ---------- */
@@ -686,46 +702,9 @@ body { background: #0b0f14; }
 /* циферблат: светлый сектор поверх ночных делений */
 .clock-daylight { stroke: #6a6450; stroke-width: .8; }
 
-/* ---------- правка 017: окно «Записи» — та же картонка, что стартовая ---------- */
-#rec-screen { background: rgba(4, 7, 13, .86); }
-#rec-card {
-  padding: 26px 30px 18px;
-  background:
-    repeating-linear-gradient(0deg, rgba(0,0,0,.05) 0 1px, transparent 1px 6px),
-    #9a8a70;
-  color: #1a1612;
-  border-radius: 3px;
-  box-shadow: 0 14px 34px rgba(0, 0, 0, .75), inset 0 0 0 1px rgba(0, 0, 0, .2);
-  transform: rotate(.5deg);
-  font-family: "Segoe Print", "Bradley Hand", "Marker Felt", "Comic Sans MS", "Trebuchet MS", sans-serif;
-}
-#rec-card::after {
-  content: '';
-  position: absolute;
-  left: 50%;
-  top: -11px;
-  width: 96px;
-  height: 22px;
-  transform: translateX(-50%) rotate(-1.5deg);
-  background: rgba(206, 214, 196, .6);
-}
-#rec-title { color: #7a2a24; }
-#rec-card h2 { border-bottom: 2px solid rgba(26, 22, 18, .5); padding-bottom: 2px; }
-#rec-modes button, #rec-now, #rec-list button, #continue-btn, #rec-close { background: #1a1612; color: #f0c469; border: 0; border-radius: 3px; }
-#rec-modes button:hover, #rec-now:hover, #rec-list button:hover, #continue-btn:hover, #rec-close:hover { background: #2e2720; }
-#rec-modes button.active { background: #7a2a24; color: #f6e7c4; }
-#rec-list li { border-bottom: 1px dashed rgba(26, 22, 18, .35); }
-#rec-note, #start-stale { color: #3d352b; font-style: italic; }
-.rec-link { color: #1a1612; }
-#end-card .rec-link { color: #1a1612; }
-#rec-btn {
-  font: inherit;
-  background: #1d242a;
-  color: #c6d0d6;
-  border: 2px solid #0c1014;
-  border-radius: 4px;
-}
-#rec-btn:hover { background-color: #2a333b; }
+#continue-btn { background: #1a1612; color: #f0c469; border: 0; border-radius: 3px; }
+#continue-btn:hover { background: #2e2720; }
+#start-stale { color: #3d352b; font-style: italic; }
 
 /* ---------- правка 022: лежбище, заначка, вторая строка задач ---------- */
 .place-den.ready .place-sub { background: #8a6a2a; color: #fff1cf; border-radius: 3px; padding: 0 4px; }
@@ -756,7 +735,7 @@ body { background: #0b0f14; }
 #goals .goal-den .pip { width: 8px; height: 8px; }
 #goals .goal.ready .goal-progress { color: #7a2a24; font-weight: 700; }
 #goals { padding: 3px 14px 4px; }
-/* Нарисованный двор: размеры зон включают объект на иллюстрации и подпись у его основания. */
+/* Нарисованный двор. У торговли клик принимает витрина или подпись, над ними есть проход. */
 .painted-courtyard .place {
   left: var(--object-x) !important; top: var(--object-y) !important;
   width: var(--object-w); height: var(--object-h); transform: none;
@@ -764,12 +743,20 @@ body { background: #0b0f14; }
 }
 .painted-courtyard .place-entrance { --object-x:39.4%; --object-y:8%; --object-w:11.6%; --object-h:25%; }
 .painted-courtyard .place-bench    { --object-x:53.6%; --object-y:19.4%; --object-w:8%; --object-h:14.6%; }
+.painted-courtyard:not(.lowered-bench):has(.npc-granny.sitting) .place-bench { --object-h:max(14.6%, calc(29.9% - var(--object-y) + 27px)); }
+.painted-courtyard.lowered-bench .place-bench {
+  --object-x:54%; --object-y:24%; --object-w:7.1%; --object-h:max(10%, calc(29.8% - var(--object-y) + 35px));
+}
 .painted-courtyard .place-bin      { --object-x:86.9%; --object-y:14.2%; --object-w:9%; --object-h:21.5%; }
+/* На низком экране оставляем место для двух подписей ниже ног героя у бака. */
+.painted-courtyard.lowered-bin .place-bin {
+  --object-y:19.6%; --object-h:max(16.1%, calc(30% - var(--object-y) + 54px));
+}
 .painted-courtyard .place-pipe     { --object-x:4.3%; --object-y:33.7%; --object-w:8.4%; --object-h:21.3%; }
 .painted-courtyard .place-den      { --object-x:4%; --object-y:63.7%; --object-w:9.4%; --den-caption-room:0px; --object-h:calc(14.7% + var(--den-caption-room)); }
-.painted-courtyard .place-stall    { --object-x:44.1%; --object-y:33.4%; --object-w:18.8%; --object-h:23.4%; }
-.painted-courtyard .place-kiosk    { --object-x:21.65%; --object-y:57.4%; --object-w:12.7%; --object-h:27.1%; }
-.painted-courtyard .place-recycle  { --object-x:66.9%; --object-y:58.2%; --object-w:14%; --object-h:26.5%; }
+.painted-courtyard .place-stall    { --object-x:44.1%; --object-y:44.3%; --object-w:18.8%; --object-h:12.5%; }
+.painted-courtyard .place-kiosk    { --object-x:21.65%; --object-y:64.7%; --object-w:12.7%; --object-h:19.8%; }
+.painted-courtyard .place-recycle  { --object-x:66.9%; --object-y:65.6%; --object-w:14%; --object-h:19.1%; }
 .painted-courtyard .place .place-emoji, .painted-courtyard #bus-stop { visibility: hidden; position: absolute; }
 .painted-courtyard .place .place-label, .painted-courtyard .place .place-sub {
   position: relative; inset: auto; width: max-content; max-width: min(14rem, 180%);
@@ -811,6 +798,19 @@ body { background: #0b0f14; }
 .painted-courtyard .tile.hero, .painted-courtyard .tile.npc {
   margin-top: -18px; /* координата актёра обозначает место, на котором он стоит */
 }
+#field .tile.hero.asleep {
+  width: calc(var(--hero-height, 76px) * .87);
+  height: calc(var(--hero-height, 76px) * .396);
+  margin-top: 0;
+  transform: translate(-50%, -100%);
+}
+#field .tile.hero.asleep .tile-emoji {
+  width: 100%; height: 100%; flex-shrink: 0;
+  background: center bottom / contain no-repeat url("hero-asleep.png") !important;
+  transform: none;
+  filter: drop-shadow(0 1px 1px rgba(31, 25, 20, .45));
+}
+#field .tile.hero.asleep::after { content: none; }
 #field .tile.hero.hero-atlas:not(.asleep) {
   animation: none;
   width: calc(var(--hero-height) * .55); height: var(--hero-height);
@@ -832,12 +832,25 @@ body { background: #0b0f14; }
   height: calc(var(--npc-height) * .72);
   margin-top: calc(var(--npc-height) * -.13);
 }
+#field.painted-courtyard .tile.npc-granny.npc-atlas.sitting {
+  height: calc(var(--npc-height) * .78);
+  margin-top: calc(var(--npc-height) * -.08);
+  margin-left: 0 !important; /* Сидящая бабка остаётся на месте во время разговора. */
+  transform: translate(calc(-50% + .9vw), -100%);
+}
+#field.painted-courtyard.lowered-bench .tile.npc-granny.npc-atlas.sitting {
+  margin-top: calc(var(--npc-height) * -.03);
+}
 #field .tile.npc-atlas .tile-emoji {
   position: absolute; left: 50%; bottom: calc(var(--cell-height) * -.04375);
   width: calc(var(--cell-height) * .8); height: var(--cell-height);
   background-image: url("npc-walk.webp") !important;
   background-size: 500% 2200%; background-position: var(--gait-col) var(--gait-row);
   animation: none; transform: translateX(-50%);
+}
+#field.painted-courtyard .tile.npc-granny.npc-atlas.sitting .tile-emoji {
+  transform: translateX(-50%) scale(1.08);
+  transform-origin: 50% 95.6%;
 }
 #field .tile.npc-atlas[data-facing="left"] .tile-emoji { transform: translateX(-50%) scaleX(-1); }
 #field .tile.npc-atlas .tile-label { position: absolute; top: 100%; }

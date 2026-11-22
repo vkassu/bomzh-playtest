@@ -20,11 +20,12 @@
   bindPanel('menu-exit-btn', 'menu-exit', 'Выход из игры');
   document.getElementById('menu-info-close').addEventListener('click', function () { dialog.close(); });
 
-  // Пока меню открыто, Tab не должен переходить к элементам двора под иллюстрацией.
-  var records = document.getElementById('rec-screen');
-  var saves = document.getElementById('save-modal');
+  // Слоты могут открываться из игры, со старта и после проигрыша.
+  var layers = ['save-modal', 'game-menu-modal', 'end-screen', 'start-screen'].map(function (id) {
+    return document.getElementById(id);
+  });
   function syncLayers() {
-    var layer = [saves, records, start].find(function (el) { return !el.classList.contains('hidden'); });
+    var layer = layers.find(function (el) { return !el.classList.contains('hidden'); });
     Array.from(document.getElementById('game').children).forEach(function (el) {
       el.inert = !!layer && el !== layer && !el.classList.contains('hidden');
     });
@@ -34,7 +35,7 @@
     }
   }
   var observer = new MutationObserver(syncLayers);
-  [records, saves, start].forEach(function (el) {
+  layers.forEach(function (el) {
     observer.observe(el, { attributes: true, attributeFilter: ['class'] });
   });
   syncLayers();

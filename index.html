@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <title>Бомж v0.1</title>
 <script>if (new URLSearchParams(location.search).get('walktest') === '1') document.documentElement.classList.add('walk-preview');</script>
-<link rel="stylesheet" href="style.css?v=20261120b">
-<link rel="stylesheet" href="art.css?v=031">
-<link rel="stylesheet" href="menu.css?v=029">
+<link rel="stylesheet" href="style.css?v=039">
+<link rel="stylesheet" href="art.css?v=039">
+<link rel="stylesheet" href="menu.css?v=039">
 <link rel="stylesheet" href="kiosk.css?v=030b">
 </head>
 <body>
@@ -44,14 +44,12 @@
     <div id="sound-panel">
       <button id="sound-btn" type="button" aria-label="Звук: вкл/выкл (M)" title="Звук: вкл/выкл (M)">🔊</button>
       <input id="sound-vol" type="range" min="0" max="100" step="1" aria-label="Громкость">
-      <button id="rec-btn" type="button"></button>
-      <button class="hud-file-btn" id="manual-save-btn" type="button" aria-label="Сохранить игру" title="Сохранить игру"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h13l3 3v13H4z"/><path d="M8 4v6h8V4M8 20v-6h8v6"/></svg></button>
-      <button class="hud-file-btn" id="manual-load-btn" type="button" aria-label="Загрузить игру" title="Загрузить игру"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 18V6h6l2 2h9v3"/><path d="M3 19l3-7h16l-3 7z"/></svg></button>
     </div>
     <div id="speed-panel">
       <button id="pause-btn" type="button" aria-label="Пауза">⏸</button>
       <span id="speed-btns"></span>
     </div>
+    <button id="game-menu-btn" type="button" aria-haspopup="dialog" aria-controls="game-menu-modal" title="Меню (Esc)">Меню</button>
   </div>
 
   <div id="tooltip" class="hidden">
@@ -95,6 +93,21 @@
     <div id="log"></div>
   </div>
   <div id="pause-banner" class="hidden"><span id="pause-title">Пауза</span><span id="pause-note" class="hidden"></span></div>
+  <dialog id="dialogue-panel" aria-labelledby="dialogue-title">
+    <header class="dialogue-head">
+      <div class="dialogue-portrait" aria-hidden="true"><span></span></div>
+      <div><div id="dialogue-context"></div><h2 id="dialogue-title" tabindex="-1"></h2></div>
+    </header>
+    <div class="dialogue-body">
+      <p id="dialogue-feedback" aria-live="polite" tabindex="-1"></p>
+      <div id="dialogue-cards"></div>
+      <div class="dialogue-skills">
+        <div class="dialogue-skill" id="dialogue-social-skill"><strong></strong><span></span><small></small></div>
+        <div class="dialogue-skill" id="dialogue-beg-skill"><strong></strong><span></span><small></small></div>
+      </div>
+    </div>
+  </dialog>
+  <div id="dialogue-result" hidden role="status"><strong></strong><span></span></div>
 
   <div id="start-screen" aria-labelledby="start-title" role="region">
     <div id="start-card">
@@ -108,7 +121,6 @@
       <div id="start-stale" class="hidden" role="status"></div>
       <div class="menu-tools">
         <button id="menu-help-btn" type="button">Как играть</button>
-        <button id="start-rec-btn" type="button" class="rec-link">Записи</button>
         <a id="menu-walk-link" href="?walktest=1">Проверить походку</a>
       </div>
     </div>
@@ -142,6 +154,14 @@
     <a id="walk-exit" href="./index.html">В меню</a>
   </section>
 
+  <div id="game-menu-modal" class="hidden" role="dialog" aria-modal="true" aria-labelledby="game-menu-title">
+    <div id="game-menu-panel">
+      <h2 id="game-menu-title">Меню</h2>
+      <button id="game-menu-resume" type="button">Вернуться в игру</button>
+      <button id="manual-save-btn" type="button">Сохранить игру</button>
+      <button id="manual-load-btn" type="button">Загрузить игру</button>
+    </div>
+  </div>
   <div id="save-modal" class="hidden" role="dialog" aria-modal="true" aria-labelledby="save-title">
     <div id="save-panel">
       <h2 id="save-title" tabindex="-1">Сохранения</h2>
@@ -158,35 +178,15 @@
       <p id="end-lived"></p>
       <button id="restart-btn" type="button">Ещё раз</button>
       <button id="end-load-btn" type="button">Загрузиться</button>
-      <button id="end-rec-btn" type="button" class="rec-link"></button>
-    </div>
-  </div>
-
-  <div id="rec-screen" class="hidden">
-    <div id="rec-card">
-      <button id="rec-close" type="button"></button>
-      <h1 id="rec-title"></h1>
-      <div id="rec-intro"></div>
-      <div id="rec-dir-block">
-        <h2 id="rec-dir-title"></h2>
-        <div id="rec-where"></div><div id="rec-last"></div><div id="rec-why"></div>
-        <div id="rec-dir-btns"><button id="rec-dir" type="button"></button><button id="rec-dir-ok" type="button" class="hidden"></button><button id="rec-dir-forget" type="button" class="hidden"></button></div>
-      </div>
-      <h2 id="rec-mode-title"></h2>
-      <div id="rec-modes"></div>
-      <button id="rec-now" type="button"></button>
-      <h2 id="rec-list-title"></h2>
-      <ul id="rec-list"></ul>
-      <div id="rec-note"></div>
     </div>
   </div>
 
 </div>
-<script src="data.js?v=031"></script>
-<script src="game.js?v=031"></script>
-<script src="sound.js?v=029"></script>
-<script src="art.js?v=031"></script>
-<script src="menu.js?v=029"></script>
+<script src="data.js?v=039"></script>
+<script src="game.js?v=039"></script>
+<script src="sound.js?v=039"></script>
+<script src="art.js?v=039"></script>
+<script src="menu.js?v=039"></script>
 <script src="walktest.js?v=031"></script>
 </body>
 </html>

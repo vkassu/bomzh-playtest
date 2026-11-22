@@ -36,6 +36,11 @@
     var ACC = {};
     for (var ik in D.items) { var idf = D.items[ik]; if (idf.acc) ACC[idf.name] = idf.acc; if (idf.readName && idf.readAcc) ACC[idf.readName] = idf.readAcc; }
     function accOf(name) { return ACC[name] || (name ? name.charAt(0).toLowerCase() + name.slice(1) : ''); }
+    function appendLogLine(text) {
+      S.log.push(text);
+      while (S.log.length > D.ui.logLines) S.log.shift();
+      S.logSeq++;
+    }
     function log(key, vars) {
       var s = pick(D.texts[key]);
       if (vars && vars.name !== undefined && vars.acc === undefined) vars.acc = accOf(vars.name);
@@ -43,12 +48,10 @@
       if (vars) {
         for (var k in vars) { s = s.split('{' + k + '}').join(vars[k]); }
       }
-      S.log.push(s);
+      appendLogLine(s);
       if (R && RCD.fromLog[key]) ev(RCD.fromLog[key], vars ? { it: NAME_ID[vars.name] || vars.name, n: vars.n } : null);   // правка 017: в запись
       S.sfx.push({ key: key, n: vars ? vars.n : undefined });   // для звука (sound.js); на симуляцию не влияет
       if (S.sfx.length > 40) S.sfx.shift();
-      while (S.log.length > D.ui.logLines) S.log.shift();
-      S.logSeq++;
     }
 
     /* ---------- телеметрия: только считает, на логику и rng не влияет ---------- */
@@ -59,7 +62,7 @@
         fires: 0, cardboardFed: 0, vodka: 0, shawarma: 0, scrapsEaten: 0, scrapsBad: 0,
         buys: {}, soldN: 0, soldMoney: 0, finds: {}, emptyTries: 0,
         spentGear: 0, spentFood: 0, spentOther: 0, used: {}, wears: 0, unwears: 0, papersRead: 0, paperFed: 0, gearDay: [],
-        asks: {}, chases: 0, missed: 0, sleepN: 0, sleeps: {}, slAt: 'ground', slT: 0,
+        asks: {}, begCards: {}, chases: 0, missed: 0, sleepN: 0, sleeps: {}, slAt: 'ground', slT: 0,
         time: { walk: 0, search: 0, sell: 0, talk: 0, shop: 0, eat: 0, light: 0, build: 0, sleep: 0, warmEntrance: 0, warmPipe: 0, warmDen: 0, warmFire: 0, bench: 0, idle: 0 },
         low: { satiety: 0, warmth: 0, health: 0, energy: 0 }, zero: { satiety: 0, warmth: 0, health: 0, energy: 0 },
         /* правка 016: ритм двора — по фазам расписания (rh[id]) и по маршрутам / типам людей */
@@ -255,7 +258,12 @@
     }
     /* Дверь «не захлопнулась»: кто-то только что вошёл или вышел — можно проскочить даже при домофоне */
     function doorOpen() { return S.doorOpen > 0; }
-    function openDoor() { S.doorOpen = Math.max(S.doorOpen, rand(D.walkers.door.openMin, D.walkers.door.openMax)); }
+    function setDoorOpen(seconds) {
+      var wasOpen = doorOpen();
+      S.doorOpen = seconds;
+      if (wasOpen !== doorOpen()) sfx(doorOpen() ? 'entranceDoorOpen' : 'entranceDoorClose');
+    }
+    function openDoor() { setDoorOpen(Math.max(S.doorOpen, rand(D.walkers.door.openMin, D.walkers.door.openMax))); }
     function entranceBlocked() {
       if (S.entranceLock > 0 && !doorOpen()) return 'lock';
       for (var i = 0; i < S.npcs.length; i++) if (S.npcs[i].type === 'cop' && copAtDoor(S.npcs[i])) return 'cop';
@@ -592,17 +600,18 @@
             else if (mods.give < 1) nl.push(T.npcs.weatherMeh);
             else if (KT.joke) nl.push(KT.joke);
             if (n.state === 'busWait') nl.push(T.npcs.busWait);
-            if (n.trash) nl.push(T.npcs.trash);
+            else if (n.trash) nl.push(T.npcs.trash);
+            else if (n.state === 'walk' && kindDef(n).weatherHurry && mods.speed > 1) nl.push(T.npcs.weatherHurry);
             else if ((n.hurry || 1) > 1.05) nl.push(T.npcs.hurry);
             else if ((n.giveF || 1) > 1.05) nl.push(T.npcs.relaxed);
           } else {
             nl = fill(T.npcs.granny, { s: plain(C.talkSeconds * slow), m: C.money });
             if (n.pose === 'sit') nl.push(T.npcs.grannySit);
           }
-          if (S.gs.charisma && !n.asked) nl.push(T.npcs.charisma.split('{pp}').join(signed(Math.round(S.gs.give * 100))));
-          if (n.asked) nl.push(T.npcs.asked);
+          if (S.gs.charisma && !n.asked && !n.spoken) nl.push(T.npcs.charisma.split('{pp}').join(signed(Math.round(S.gs.give * 100))));
+          if (n.asked || n.spoken) nl.push(T.npcs.asked);
           else nl.push(ws === Infinity ? T.npcs.noCatch : (ws < 1 ? T.walkNear : T.walk.split('{s}').join(Math.ceil(ws))));
-          return { title: npcName(n) + (n.asked ? ' (' + T.askedMark + ')' : ''), lines: nl };
+          return { title: npcName(n) + (n.asked || n.spoken ? ' (' + T.askedMark + ')' : ''), lines: nl };
         }
         return {
           title: C.name,
@@ -794,7 +803,7 @@
       emit('wake');
     }
     function toggleSleep() {
-      if (S.over) return;
+      if (S.over || S.begging.dialog) return;
       var h = S.hero;
       if (h.asleep) { wake('wake'); return; }
       if (h.energy >= D.hero.max) { log('notSleepy'); return; }
@@ -997,13 +1006,14 @@
         if (n) n.engaged = false;
       }
     }
-    function heroLeavePlace() {
+    function heroLeavePlace(forced) {
       cancelHeroTask();
+      if (!forced && S.hero.at === 'entrance' && !doorOpen()) sfx('entranceDoorPass');
       S.hero.at = null;
       S.menuOpen = false;
     }
     function talkable(n) {
-      return !!n && (n.type === 'passerby' || n.type === 'granny') && !n.engaged && !n.asked && n.state !== 'board';
+      return !!n && (n.type === 'passerby' || n.type === 'granny') && !n.engaged && !n.asked && !n.spoken && n.state !== 'board';
     }
     function startTalk(n) {
       cancelHeroTask();
@@ -1011,9 +1021,162 @@
       S.hero.task = { kind: 'talk', npcId: n.id, t: 0, dur: D.npcs[n.type].talkSeconds };
     }
 
+    function skillProgress(skill) {
+      var social = skill === 'social', xp = social ? S.begging.socialXp : S.begging.xp;
+      var levels = social ? D.begging.socialLevels : D.begging.levels, level = 1;
+      while (level < levels.length && xp >= levels[level]) level++;
+      var nextCard = null;
+      for (var id in D.begging.cards) {
+        var card = D.begging.cards[id];
+        if ((card.skill || 'begging') === skill && card.level === level + 1) nextCard = card.label;
+      }
+      return { xp: xp, level: level, nextLevelXp: levels[level] || null, nextCard: nextCard };
+    }
+    function cardEnabled(id, dialog) {
+      if (id === 'ask' || id === 'goodbye') return true;
+      return id === 'askAboutYard' ? !dialog.question : !dialog.used;
+    }
+    function nextDialogueLine(id, play) {
+      var variants = D.begging.cards[id].variants, count = { talk: 'talksTold', joke: 'jokesTold', ask: 'requestsMade' }[id];
+      var variant = variants[S.begging[count] % variants.length];
+      if (play) S.begging[count]++;
+      return variant;
+    }
+    function farewellLine(dialog, kind) {
+      var data = D.begging.cards.goodbye, last = dialog.lastMove;
+      if (last && last.card === 'askAboutYard') {
+        var yard = data.yard[kind][last.index];
+        if (yard) return { id: 'yard-' + kind + '-' + last.index, line: yard.line, reply: yard.reply };
+      }
+      var topic = last && data.topics[last.topic];
+      if (topic) return { id: last.topic, line: topic.line, reply: topic.replies[kind] };
+      var opener = data.openers[S.begging.neutralGoodbyes % data.openers.length];
+      return { id: opener.id, line: opener.line, reply: opener.replies[kind], neutral: true };
+    }
+    function begView() {
+      var dialog = S.begging.dialog;
+      if (!dialog) return null;
+      var n = findNpc(dialog.npcId), cards = [];
+      var skills = { social: skillProgress('social'), begging: skillProgress('begging') };
+      for (var id in D.begging.cards) {
+        var card = D.begging.cards[id], skill = card.skill || 'begging';
+        if (card.level > skills[skill].level) continue;
+        var enabled = cardEnabled(id, dialog);
+        cards.push({ id: id, label: card.label, description: card.description, enabled: enabled,
+          line: id === 'goodbye' ? farewellLine(dialog, who(n)).line : card.variants && enabled ? nextDialogueLine(id, false).line : null });
+      }
+      return { npcId: n.id, name: npcName(n), kind: who(n), skills: skills, socialGain: dialog.socialGain,
+        xp: skills.begging.xp, level: skills.begging.level, nextLevelXp: skills.begging.nextLevelXp, nextCard: skills.begging.nextCard,
+        feedback: dialog.feedback, exchange: dialog.exchange || null, joke: dialog.used === 'joke' ? dialog.exchange || null : null,
+        unlocked: dialog.unlocked.slice(), chance: clamp(giveChance(n) + dialog.bonus, 0, 1), cards: cards };
+    }
+    function formatYardHint(reply) {
+      var places = D.places, kiosk = places.kiosk, recycle = places.recycle;
+      function price(type) { return kiosk.goods.find(function (item) { return item.type === type; }).price; }
+      var values = { tea: price('tea'), bread: price('bread'), shawarma: price('shawarma'),
+        kioskClose: fmtHour(kiosk.hours[1]), recycleOpen: fmtHour(recycle.hours[0]), recycleClose: fmtHour(recycle.hours[1]),
+        stallOpen: fmtHour(places.stall.hours[0]), stallClose: fmtHour(places.stall.hours[1]),
+        can: recycle.prices.can, bottle: recycle.prices.bottle, cardboard: D.den.stages[0].need[0].cardboard };
+      return reply.replace(/\{(\w+)\}/g, function (_, key) { return values[key]; });
+    }
+    function savedDialogueMove(dialog, kind) {
+      if (dialog.question) {
+        var hints = D.begging.cards.askAboutYard.hints[kind];
+        var index = hints.findIndex(function (hint) { return formatYardHint(hint) === dialog.feedback; });
+        if (index >= 0) return { card: 'askAboutYard', index: index };
+        if (!dialog.used && S.begging.yardHintsHeard[kind]) {
+          return { card: 'askAboutYard', index: (S.begging.yardHintsHeard[kind] - 1) % hints.length };
+        }
+      }
+      if (dialog.exchange && (!dialog.question || dialog.feedback === dialog.exchange.reply)) {
+        return { card: dialog.used, topic: dialog.exchange.id };
+      }
+      if (dialog.used === 'explain' || dialog.used === 'favor') {
+        if (!dialog.question || dialog.feedback === D.begging.cards[dialog.used].feedback) {
+          return { card: dialog.used, topic: dialog.used };
+        }
+      }
+      return null;
+    }
+    function awardCardXp(skill, dialog, previous) {
+      var social = skill === 'social', gain = social ? D.begging.xpPerReply : D.begging.xpPerAsk;
+      if (social) {
+        S.begging.socialXp += gain;
+        dialog.socialGain += gain;
+      } else S.begging.xp += gain;
+      var after = skillProgress(skill);
+      if (after.level > previous.level && previous.nextCard) dialog.unlocked.push(previous.nextCard);
+      ev(social ? 'socialXp' : 'begXp', { id: dialog.npcId, xp: after.xp, level: after.level, gain: gain });
+    }
+    function playBegCard(id) {
+      var dialog = S.begging.dialog;
+      if (!dialog || !Object.prototype.hasOwnProperty.call(D.begging.cards, id)) return false;
+      var card = D.begging.cards[id], skill = card.skill || 'begging', progress = skillProgress(skill), n = findNpc(dialog.npcId);
+      if (!n || card.level > progress.level || !cardEnabled(id, dialog)) return false;
+      teleInc(S.tele.begCards, id);
+      ev('begCard', { id: n.id, who: who(n), card: id, skill: id === 'goodbye' ? undefined : skill, level: progress.level });
+      if (id === 'askAboutYard') {
+        var kind = who(n), hints = card.hints[kind], heard = S.begging.yardHintsHeard[kind] || 0;
+        var index = heard % hints.length;
+        S.begging.yardHintsHeard[kind] = heard + 1;
+        dialog.question = true;
+        dialog.feedback = formatYardHint(hints[index]);
+        dialog.lastMove = { card: id, index: index };
+        appendLogLine(npcName(n) + ' — ' + dialog.feedback);
+        ev('yardHint', { id: n.id, who: kind, index: index, text: dialog.feedback });
+        awardCardXp('social', dialog, progress);
+        return true;
+      }
+      if (id !== 'ask' && id !== 'goodbye') {
+        dialog.used = id;
+        if (card.variants) {
+          var variant = nextDialogueLine(id, true);
+          dialog.exchange = { id: variant.id, line: variant.line, reply: variant.replies[who(n)] };
+          dialog.bonus = card.bonusByKind[who(n)];
+          dialog.feedback = dialog.exchange.reply;
+          ev(id, { id: n.id, who: who(n), variant: variant.id, line: variant.line, reply: dialog.exchange.reply });
+        } else {
+          dialog.bonus = card.chance;
+          dialog.feedback = card.feedback;
+        }
+        dialog.lastMove = { card: id, topic: dialog.exchange ? dialog.exchange.id : id };
+        if (skill === 'social') awardCardXp(skill, dialog, progress);
+        return true;
+      }
+      S.begging.dialog = null;
+      var result = {}, text = card.feedback;
+      if (id === 'ask') {
+        result = finishHeroTask(dialog, nextDialogueLine(id, true));
+        text = result.outcome;
+        awardCardXp('begging', dialog, progress);
+      } else {
+        var farewell = farewellLine(dialog, who(n));
+        if (farewell.neutral) S.begging.neutralGoodbyes++;
+        result.variant = farewell.id; result.line = farewell.line; result.reply = farewell.reply;
+        text = '';
+        appendLogLine(D.hero.name + ' — ' + result.line + '  ' + npcName(n) + ' — ' + result.reply);
+        n.engaged = false;
+        n.spoken = true;
+        if (R) R.done = S.hero.task;
+        S.hero.task = null;
+        ev('done', { k: 'conversation', id: n.id, who: who(n), variant: farewell.id, line: result.line, reply: result.reply });
+      }
+      // Доводим прерванный шаг до конца в исходном порядке: награда, предметы, затем NPC.
+      updateItems(dialog.step);
+      updateNpcs(dialog.step);
+      recTrack();
+      var skills = { social: skillProgress('social'), begging: skillProgress('begging') };
+      return { action: id, ok: !!result.ok, got: result.got || 0, food: result.food || null, text: text, skills: skills,
+        exchange: { id: result.variant, line: result.line, reply: result.reply, name: npcName(n) },
+        why: result.why || null, dropped: !!result.drop,
+        xp: skills.begging.xp, xpGain: id === 'ask' ? D.begging.xpPerAsk : 0, socialGain: dialog.socialGain,
+        level: skills.begging.level, unlocked: dialog.unlocked.slice() };
+    }
+
     /* ---------- ходьба: герой ходит ногами, дорога стоит времени ---------- */
+    function baseWalkSpeed() { return D.hero.walk.speed * D.hero.walk.heroMult; }
     function walkSpeed() {
-      var Wk = D.hero.walk, v = Wk.speed * Wk.heroMult;
+      var Wk = D.hero.walk, v = baseWalkSpeed();
       if (S.hero.energy < D.hero.tiredThreshold) v *= Wk.tiredFactor;
       if (invFull()) v *= Wk.fullBagFactor;
       return v * S.gs.sp.walk;
@@ -1041,7 +1204,7 @@
     }
     /* Приказ «иди»: к месту, встречному, предмету, костру или в точку. Отменяет прежний маршрут и дело. */
     function order(target, x, y) {
-      if (S.over) return;
+      if (S.over || S.begging.dialog) return;
       /* Приказ в никуда (цели нет в мире, точки нет) игнорируется: герой продолжает прежнее, журнал и запись не трогаем. */
       var ok = isFinite(x) && isFinite(y) && x !== null && y !== null;
       if (!ok && target) ok = (target.kind === 'place' && !!D.places[target.id]) || (target.kind === 'npc' && !!findNpc(target.id)) || (target.kind === 'item' && !!findItem(target.id));
@@ -1107,6 +1270,7 @@
       }
       S.hero.at = id;
       if (id === 'entrance') {
+        if (!doorOpen()) sfx('entranceDoorPass');
         rollPatience();
         if (S.entranceLock > 0) { S.tele.followIn++; rhTele().follow++; log('doorFollow'); }  // домофон ещё заперт, но дверь придержали — зашёл следом
         else log('atEntrance');
@@ -1167,7 +1331,7 @@
     }
     /* Клавиши движения: (0,0) — стоим. Нажатие отменяет маршрут и дело. */
     function setMoveDir(dx, dy) {
-      if (S.over) return;
+      if (S.over || S.begging.dialog) return;
       if (R) {
         var mv = !!(dx || dy);
         if (mv && R.w.km === null) { R.w.km = S.total; ev('keys', { dx: dx, dy: dy, by: inCtx.by, paused: inCtx.paused ? 1 : 0, was: curOrder() }); }
@@ -1215,7 +1379,12 @@
       return true;
     }
 
-    function finishHeroTask() {
+    function requestSound(key, coins) {
+      // Прежний выбор случайной строки журнала занимал один шаг игрового генератора.
+      rng();
+      sfx(key, coins);
+    }
+    function finishHeroTask(dialog, request) {
       var h = S.hero, t = h.task, n, c, res = {};
       h.task = null;
       if (t.kind === 'search') {
@@ -1260,6 +1429,8 @@
         n = findNpc(t.npcId);
         if (!n) return;
         c = D.npcs[n.type];
+        var chance = clamp(giveChance(n) + dialog.bonus, 0, 1);
+        var extraMoney = dialog.used ? D.begging.cards[dialog.used].extraMoney || 0 : 0;
         n.engaged = false;
         n.asked = true;                                   // у одного человека просят один раз
         S.stats.asks++;
@@ -1269,34 +1440,43 @@
         ta.n++; res.who = ak; res.id = n.id; res.ok = 0;
         if (n.type === 'passerby') {
           var K = kindDef(n), r2 = rng();
-          if (r2 < giveChance(n)) {
+          if (r2 < chance) {
             var m = K.money ? (function (row) { return randInt(row.min, row.max); })(weighted(K.money)) : randInt(K.moneyMin, K.moneyMax);   // у подвыпившего — лотерея
+            m += extraMoney;
             S.money += m;
             S.stats.gave++; S.stats.begMoney += m;
             ta.ok++; ta.sum += m; res.ok = 1; res.got = m;
             rt.ok++; rt.money += m;
-            log('begOk_' + n.kind, { n: m });
-          } else if (r2 < K.giveChance * (n.giveF || 1) + S.gs.give) {
-            res.why = 'weather'; log('begNoWeather');                          // дал бы, да погода не та
+            requestSound('begOk_' + n.kind, m);
+          } else if (r2 < K.giveChance * (n.giveF || 1) + S.gs.give + dialog.bonus) {
+            res.why = 'weather'; requestSound('begNoWeather');                 // дал бы, да погода не та
           } else {
-            log('begNo_' + n.kind);
+            requestSound('begNo_' + n.kind);
           }
-        } else if (giveChance(n) < 1 && rng() >= giveChance(n)) {
-          log('grannyNo');                                // бабка подаёт всегда, если вид не отпугнул (отрицательная харизма)
+        } else if (chance < 1 && rng() >= chance) {
+          requestSound('grannyNo');                       // бабка подаёт всегда, если вид не отпугнул (отрицательная харизма)
         } else {
           S.stats.gave++;
           ta.ok++; rt.ok++; res.ok = 1;
           if (rng() < c.scrapsChance) {
             res.food = 'scraps';
-            log('grannyFood');
-            give('scraps', n.x, n.y);
+            requestSound('grannyFood');
+            if (!give('scraps', n.x, n.y)) res.drop = 1;
           } else {
-            S.money += c.money;
-            S.stats.begMoney += c.money;
-            ta.sum += c.money; rt.money += c.money; res.got = c.money;
-            log('grannyMoney', { n: c.money });
+            var coins = c.money + extraMoney;
+            S.money += coins;
+            S.stats.begMoney += coins;
+            ta.sum += coins; rt.money += coins; res.got = coins;
+            requestSound('grannyMoney', coins);
           }
         }
+        var ui = D.ui.dialogue;
+        res.variant = request.id; res.line = request.line;
+        res.reply = request.replies[ak][res.ok ? 'yes' : 'no'];
+        if (res.food) res.outcome = res.drop ? ui.foodDropped : ui.foodReceived;
+        else if (res.ok) res.outcome = ui.moneyReceived.replace('{n}', res.got);
+        else res.outcome = res.why === 'weather' ? ui.weatherRefusal : ui.refusal;
+        appendLogLine(D.hero.name + ' — ' + res.line + '  ' + npcName(n) + ' — ' + res.reply + '  ' + res.outcome);
       } else if (t.kind === 'use') {
         var u = D.items[t.item.type].use;
         if (u.satiety) h.satiety = clamp(h.satiety + u.satiety, 0, D.hero.max);
@@ -1331,6 +1511,7 @@
       if (t.placeId && D.places[t.placeId].autoRepeat && !S.over && !h.asleep && !h.task && h.at === t.placeId) {
         startPlaceTask(t.placeId, t.t - t.dur, true);
       }
+      return res;
     }
 
     /* ---------- правка 022: лежбище у теплотрассы ----------
@@ -1424,7 +1605,7 @@
     /* Заначка: класть и брать можно, стоя в лежбище (не во сне) */
     function stashReady() { return stashCap() > 0 && S.hero.at === 'den' && !S.hero.asleep && !S.over; }
     function stashPut(id) {
-      if (S.over || stashCap() <= 0) return false;
+      if (S.over || S.begging.dialog || stashCap() <= 0) return false;
       if (S.hero.asleep) { log('cantUseAsleep'); return false; }
       if (S.hero.at !== 'den') { log('stashFar'); return false; }
       var idx = invIndex(id);
@@ -1438,7 +1619,7 @@
       return true;
     }
     function stashTake(id) {
-      if (S.over) return false;
+      if (S.over || S.begging.dialog) return false;
       if (S.hero.asleep) { log('cantUseAsleep'); return false; }
       if (S.hero.at !== 'den') { log('stashFar'); return false; }
       var idx = -1;
@@ -1504,7 +1685,7 @@
     }
     /* Снять надетое (клик по слоту): уходит в пакет, а если места нет — к ногам */
     function unwear(slot) {
-      if (S.over) return false;
+      if (S.over || S.begging.dialog) return false;
       var w = S.worn[slot];
       if (!w) return false;
       if (S.hero.asleep) { log('cantUseAsleep'); return false; }
@@ -1521,7 +1702,7 @@
     /* Клик по предмету в пакете: еда/питьё — употребить; одежда — надеть; спички — костёр у ног (нужно топливо: картон или газета);
        газета — сначала прочитать (прогноз), прочитанная и картон — подкинуть в костёр, если герой рядом с ним. */
     function useInv(id) {
-      if (S.over) return false;
+      if (S.over || S.begging.dialog) return false;
       var idx = invIndex(id);
       if (idx < 0) return false;
       var it = S.inv[idx], def = D.items[it.type];
@@ -1572,7 +1753,7 @@
     }
     /* Вытащить предмет из пакета: ложится у ног героя. */
     function dropFromInv(id) {
-      if (S.over) return false;
+      if (S.over || S.begging.dialog) return false;
       var idx = invIndex(id);
       if (idx < 0) return false;
       var it = S.inv.splice(idx, 1)[0];
@@ -1585,7 +1766,7 @@
     /* Покупка там, где открыто меню: ларёк (еда, спички, пакет с ручками) или палатка (одежда — сразу надевается) */
     function buy(type) {
       var pid = S.hero.at, K = D.places[pid], g = null, def = D.items[type];
-      if (S.over || !S.menuOpen || S.hero.asleep || !K || !K.goods || placeClosed(pid)) return false;
+      if (S.over || S.begging.dialog || !S.menuOpen || S.hero.asleep || !K || !K.goods || placeClosed(pid)) return false;
       for (var i = 0; i < K.goods.length; i++) if (K.goods[i].type === type) g = K.goods[i];
       if (!g) return false;
       if (def.once && S.bagHandles) return false;          // пакет с ручками берут один раз
@@ -1684,7 +1865,11 @@
 
     /* ---------- встречные ---------- */
     /* ---------- живые прохожие: ходят по маршрутам из data.js (walkers.routes), уходят за край, в подъезд, в автобус ---------- */
-    function sfx(key) { S.sfx.push({ key: key }); if (S.sfx.length > 40) S.sfx.shift(); }
+    function sfx(key, amount) {
+      var event = { key: key };
+      if (amount !== undefined) event.n = amount;
+      S.sfx.push(event); if (S.sfx.length > 40) S.sfx.shift();
+    }
     function walkerMods() {
       var WK = D.walkers, a = WK.wind[Math.min(S.weather.wind, WK.wind.length - 1)], b = WK.weather[S.weather.type];
       if (!b) return a;
@@ -1692,7 +1877,13 @@
     }
     function kindDef(n) { return n.type === 'passerby' ? D.npcs.passerby.kinds[n.kind] : D.npcs[n.type]; }
     function npcName(n) { return kindDef(n).name; }
-    function walkerSpeed(n) { return D.hero.walk.speed * n.speedF * walkerMods().speed; }
+    function walkerSpeed(n) {
+      var WK = D.walkers, factor = Math.min(n.speedF, WK.maxWalkFactor);
+      if (n.type === 'passerby' && kindDef(n).weatherHurry) {
+        factor = Math.min(factor * walkerMods().speed, WK.maxWeatherFactor);
+      }
+      return baseWalkSpeed() * factor;
+    }
     function giveChance(n) { return clamp((n.type === 'passerby' ? kindDef(n).giveChance * walkerMods().give * (n.giveF || 1) : 1) + S.gs.give, 0, 1); }   // харизма одежды: ± п.п.; giveF — настроение фазы, в которой человек вышел
     function spawnInterval() {
       var I = rhythm().spawn;
@@ -1765,7 +1956,7 @@
       };
       if (path[0].wait) {                                   // начинает с остановки (выходит из подъезда и стоит в дверях)
         n.leg = 0; n.wait = path[0].wait; n.pose = 'stand'; n.walking = false;
-        if (path[0].door === 'out') { S.tele.doorOut++; S.doorOpen = Math.max(S.doorOpen, n.wait + rand(D.walkers.door.openMin, D.walkers.door.openMax)); }
+        if (path[0].door === 'out') { S.tele.doorOut++; setDoorOpen(Math.max(S.doorOpen, n.wait + rand(D.walkers.door.openMin, D.walkers.door.openMax))); }
       }
       S.npcs.push(n);
       return n;
@@ -1877,10 +2068,10 @@
     }
     /* Успеет ли герой перехватить прохожего, если отдать приказ сейчас. Та же математика, что у приказа и у ботов (intercept / walkSeconds):
        текущая скорость героя с усталостью и пакетом, маршрут и скорость прохожего с погодой. Ничего не меняет и не трогает генератор случайных чисел.
-       status: 'ok' — успеет через t с в точке (x, y); 'no' — не догнать; 'asked' — уже просил; 'none' — просить нельзя (занят, садится в автобус, не прохожий). */
+       status: 'ok' — успеет через t с в точке (x, y); 'no' — не догнать; 'asked' — уже говорили; 'none' — недоступен для разговора. */
     function catchInfo(n) {
       if (!n || (n.type !== 'passerby' && n.type !== 'granny')) return { status: 'none' };
-      if (n.asked) return { status: 'asked' };
+      if (n.asked || n.spoken) return { status: 'asked' };
       if (!talkable(n)) return { status: 'none' };
       var ip = intercept(n);
       return ip ? { status: 'ok', t: ip.t, x: ip.x, y: ip.y } : { status: 'no' };
@@ -1960,15 +2151,18 @@
         return;
       }
       if (b.state === 'in') {
-        b.x += B.speed * dt;
-        if (b.x >= B.stop.x) {
+        b.x -= B.speed * dt;
+        if (b.x <= B.stop.x) {
           b.x = B.stop.x;
           var waiting = 0, outN = rollIndex(rhythm().bus.out), keep = walkerMods().spawn, kept = 0, q;
           for (q = 0; q < outN; q++) if (keep >= 1 || rng() < keep) kept++;         // в непогоду выходит меньше людей: тот же множитель, что у появления с краёв
           outN = kept;
           for (i = 0; i < S.npcs.length; i++) if (S.npcs[i].state === 'busWait') waiting++;
           if (waiting === 0 && outN === 0) { b.state = 'out'; b.pass = true; S.tele.busPass++; }   // ни ждущих, ни выходящих: проехал мимо
-          else { b.state = 'stop'; b.t = 0; b.outLeft = outN; b.outT = 0; S.tele.busStops++; }
+          else {
+            b.state = 'stop'; b.t = 0; b.outLeft = outN; b.outT = 0; S.tele.busStops++;
+            sfx('busDoorsOpen');
+          }
         }
       } else if (b.state === 'stop') {
         b.t += dt;
@@ -1987,13 +2181,34 @@
           }
         }
       } else {
-        b.x += B.speed * dt;
-        if (b.x >= B.endX) { S.bus = null; S.busTimer = busInterval(); }
+        b.x -= B.speed * dt;
+        if (b.x <= B.endX) { S.bus = null; S.busTimer = busInterval(); }
       }
     }
     function busInterval() {
       var I = rhythm().bus.interval;
       return rand(I.min, I.max);
+    }
+    /* Декоративные рейсы идут по игровым часам и не используют генератор механик. */
+    function updateTraffic(dt) {
+      var cfg = D.walkers.traffic, vehicle = S.traffic;
+      if (!vehicle) {
+        var cycleStart = Math.floor(S.total / cfg.cycle) * cfg.cycle;
+        for (var i = 0; i < cfg.trips.length; i++) {
+          var trip = cfg.trips[i], start = cycleStart + trip.at;
+          if (start > S.total || start <= S.total - dt) continue;
+          // Оставляем полосу свободной на весь путь машины, если ожидается рейсовый автобус.
+          if (trip.dir < 0 && (S.bus || S.busTimer <= (1 + 2 * cfg.edge) / cfg.carSpeed)) return;
+          vehicle = S.traffic = { kind: trip.kind, dir: trip.dir, startedAt: start,
+            x: 0, y: trip.dir < 0 ? D.walkers.bus.y : cfg.farY };
+          break;
+        }
+        if (!vehicle) return;
+      }
+      var speed = vehicle.kind === 'bus' ? cfg.busSpeed : cfg.carSpeed;
+      var distance = (S.total - vehicle.startedAt) * speed;
+      if (distance >= 1 + 2 * cfg.edge) S.traffic = null;
+      else vehicle.x = vehicle.dir < 0 ? 1 + cfg.edge - distance : distance - cfg.edge;
     }
     /* Подъезд: терпение жильцов случайно при каждом входе; накопленное раздражение сохраняется долей */
     function rollPatience() {
@@ -2014,8 +2229,9 @@
         for (i = 0; i < S.npcs.length; i++) if (S.npcs[i].type === 'passerby') alive++;
         if (alive < D.walkers.maxAlive) spawnWalker();
       }
-      if (S.doorOpen > 0) S.doorOpen = Math.max(0, S.doorOpen - dt);
+      if (doorOpen()) setDoorOpen(Math.max(0, S.doorOpen - dt));
       updateBus(dt);
+      updateTraffic(dt);
       while (S.trashTimes.length && S.rhT >= S.trashTimes[0]) { S.trashTimes.shift(); spawnWalker(null, 'trash'); }   // жильцы выносят мусор (сверх maxAlive)
       if (S.grannyAt !== null && S.rhT >= S.grannyAt) {
         S.grannyAt = null;
@@ -2042,13 +2258,13 @@
         S.entranceStay += dt;
         if (S.entranceStay >= S.entrancePatience) {          // жильцы выставляют: без урона, но с домофоном
           wake(null);
-          heroLeavePlace();
+          heroLeavePlace(true);
           S.hero.move = null;
           emit('evicted');
           var ep = clampPos(E.x + L.kickOffset.x, E.y + L.kickOffset.y);
           S.hero.x = ep.x; S.hero.y = ep.y;
           S.entranceStay = 0;
-          S.doorOpen = 0;                                    // за спиной хлопнула дверь
+          setDoorOpen(0);                                    // за спиной хлопнула дверь
           S.entranceLock = rand(E.lockMin, E.lockMax);
           S.tele.evictions++;
           log('entranceEvicted', { n: Math.ceil(S.entranceLock) });
@@ -2074,7 +2290,7 @@
           }
           if (S.hero.at === 'entrance' && copAtDoor(n)) {
             wake(null);
-            heroLeavePlace();
+            heroLeavePlace(true);
             S.hero.move = null;
             emit('copKick');
             var p = clampPos(D.places.entrance.x + L.kickOffset.x, D.places.entrance.y + L.kickOffset.y);
@@ -2083,7 +2299,7 @@
             log('copKick', { n: C.kickDamage });
             damage(C.kickDamage, 'other');
             S.entranceLock = rand(D.places.entrance.lockMin, D.places.entrance.lockMax);
-            S.doorOpen = 0;
+            setDoorOpen(0);
             S.entranceStay = 0;
             if (!S.over) log('entranceLockSet', { n: Math.ceil(S.entranceLock) });
           }
@@ -2142,7 +2358,11 @@
 
     /* ---------- главный шаг ---------- */
     function update(dt) {
-      if (S.over) return;
+      if (S.over || S.begging.dialog) return;
+      if (dt > D.speed.maxSubstep && S.hero.task && S.hero.task.kind === 'talk') {
+        advance(dt / S.speed);
+        return;
+      }
       recTrack();
       update1(dt);
       recTrack();
@@ -2175,6 +2395,11 @@
       var t = S.hero.task;
       if (t) {
         t.t += dt / taskSlowdown();
+        if (t.t >= t.dur && t.kind === 'talk' && findNpc(t.npcId)) {
+          S.begging.dialog = { npcId: t.npcId, used: null, question: false, lastMove: null, socialGain: 0, unlocked: [], bonus: 0, feedback: '', step: dt };
+          ev('begOpen', { id: t.npcId, level: skillProgress('begging').level, xp: S.begging.xp, socialXp: S.begging.socialXp });
+          return;
+        }
         if (t.t >= t.dur) finishHeroTask();
       }
       if (S.over) return;
@@ -2185,7 +2410,7 @@
     /* Реальное время -> игровое с учётом скорости; подшаги не длиннее maxSubstep. */
     function advance(realDt) {
       var left = realDt, guard = 0;
-      while (left > 1e-9 && !S.over && guard++ < 100000) {
+      while (left > 1e-9 && !S.over && !S.begging.dialog && guard++ < 100000) {
         var sp = S.speed;
         var step = Math.min(D.speed.maxSubstep, left * sp);
         update(step);
@@ -2213,8 +2438,9 @@
         weatherAhead: [], forecast: [],
         menuOpen: false,
         walkerTimer: 0, copTimer: 0, grannyAt: null,
-        bus: null, busTimer: 0, doorOpen: 0,
+        bus: null, busTimer: 0, traffic: null, doorOpen: 0,
         stats: { asks: 0, gave: 0, begMoney: 0 },
+        begging: { xp: 0, socialXp: 0, yardHintsHeard: {}, talksTold: 0, jokesTold: 0, requestsMade: 0, neutralGoodbyes: 0, dialog: null },
         tele: newTele(),
         wasStarving: false, wasFreezing: false, wasExhausted: false,
         weather: null, weatherLocked: false, entranceLock: 0, entranceStay: 0,
@@ -2252,6 +2478,52 @@
     function loadState(sv, stored) {
       if (!sv || sv.kind !== 'bomzh-save' || sv.build !== D.build || sv.formatVersion !== D.save.formatVersion) return false;
       S = copy(sv.S); S.sfx = [];
+      if (!S.begging) S.begging = { xp: S.stats.asks * D.begging.xpPerAsk, dialog: null };
+      if (!S.tele.begCards) S.tele.begCards = {};
+      if (S.begging.socialXp === undefined) {
+        var cards = S.tele.begCards;
+        S.begging.socialXp = ((cards.talk || 0) + (cards.joke || 0) + (cards.askAboutYard || 0)) * D.begging.xpPerReply;
+      }
+      var dialog = S.begging.dialog;
+      // В старых слотах сохранился только ответ на прежнюю шутку. Новые пары начинаются со следующего выбора.
+      if (S.begging.jokesTold === undefined) S.begging.jokesTold = 0;
+      if (S.begging.talksTold === undefined) S.begging.talksTold = 0;
+      if (S.begging.requestsMade === undefined) S.begging.requestsMade = 0;
+      if (S.begging.neutralGoodbyes === undefined) S.begging.neutralGoodbyes = 0;
+      if (dialog && dialog.joke && !dialog.exchange) dialog.exchange = dialog.joke;
+      if (!S.begging.yardHintsHeard) {
+        // Раньше каждый типаж знал ровно первую реплику. Учитываем только услышанное до сохранения.
+        var heard = S.begging.yardHintsHeard = {}, hints = D.begging.cards.askAboutYard.hints;
+        if (dialog && dialog.question) {
+          var speaker = findNpc(dialog.npcId);
+          if (speaker) heard[who(speaker)] = 1;
+        }
+        for (var kind in hints) {
+          var name = kind === 'granny' ? D.npcs.granny.name : D.npcs.passerby.kinds[kind].name;
+          if (S.log.some(function (line) { return line.startsWith(name + ' — «'); })) heard[kind] = 1;
+        }
+        if (sv.rec && stored && stored.events) {
+          for (var i = 0; i < Math.min(sv.rec.n, stored.events.length); i++) {
+            var event = stored.events[i];
+            if (event.e === 'yardHint' && hints[event.who]) heard[event.who] = 1;
+          }
+        }
+      }
+      if (dialog && dialog.question === undefined) {
+        dialog.question = false;
+        dialog.socialGain = dialog.used === 'talk' || dialog.used === 'joke' ? D.begging.xpPerReply : 0;
+        dialog.unlocked = [];
+      }
+      if (dialog && dialog.lastMove === undefined) {
+        var partner = findNpc(dialog.npcId);
+        dialog.lastMove = partner ? savedDialogueMove(dialog, who(partner)) : null;
+      }
+      if (S.traffic === undefined) S.traffic = null;
+      // В старых сохранениях автобус подъезжал слева и уезжал вправо.
+      var bus = S.bus, stopX = D.walkers.bus.stop.x;
+      if (bus && ((bus.state === 'in' && bus.x < stopX) || (bus.state === 'out' && bus.x > stopX))) {
+        bus.x = 2 * stopX - bus.x;
+      }
       if (!walkable(S.hero.x,S.hero.y)) {
         var place = S.hero.at && D.places[S.hero.at];
         Object.assign(S.hero, place ? standPoint({kind:'place',id:S.hero.at}) : projectGround(S.hero.x,S.hero.y));
@@ -2297,9 +2569,7 @@
     function note(key, vars) {
       var arr = D.texts[key], s = arr[Math.floor(Math.random() * arr.length)];
       if (vars) for (var k in vars) s = s.split('{' + k + '}').join(vars[k]);
-      S.log.push(s);
-      while (S.log.length > D.ui.logLines) S.log.shift();
-      S.logSeq++;
+      appendLogLine(s);
     }
     reset();
 
@@ -2383,6 +2653,7 @@
       walkerMods: walkerMods,
       walkerSpeed: walkerSpeed,
       giveChance: giveChance,
+      begView: begView, playBegCard: playBegCard,
       npcName: npcName,
       talkable: talkable,
       entranceMood: entranceMood
@@ -2410,11 +2681,13 @@
   function initUI() {
     if (document.documentElement.classList.contains('walk-preview')) return;
     var elField = $('field');
-    var busEl = null;
+    var busEl = null, trafficEl = null;
     var elPlaces = $('layer-places');
     var elTiles = $('layer-tiles');
     var elBars = $('layer-bars');
     var elMenu = $('shop-menu');
+    var dialoguePanel = $('dialogue-panel'), dialogueCards = $('dialogue-cards');
+    var dialogueResult = $('dialogue-result'), dialogueResultTimer = 0, dialogueSig = '';
     var elMenuGoods = $('shop-goods'), elMenuTitle = $('shop-title'), menuSig = null;
     var elGearSlots = $('gear-slots'), elGearSum = $('gear-sum'), elInvMark = $('inv-mark'), gearSlotEls = {}, gearSig = null;
     var elLog = $('log');
@@ -2663,10 +2936,15 @@
           return false;
         }
       }
-      store.flushed = 0; store.overDone = false; store.broken = false; store.fullNoted = false; store.lastPhase = game.state.phase;
+      if (global.BomzhSound && global.BomzhSound.resetScene) global.BomzhSound.resetScene();
+      store.flushed = 0; store.overDone = false; store.broken = false; store.lastAutoState = null; store.lastPhase = game.state.phase;
       menuSig = null; gearSig = null;
+      dialogueSig = '';
+      dialogueResult.hidden = true;
+      clearTimeout(dialogueResultTimer);
       elTiles.innerHTML = '';
       busEl = null;
+      trafficEl = null;
       elBars.innerHTML = '';
       tileEls = {};
       barEls = {};
@@ -2743,6 +3021,10 @@
       if (!c || now - c.ts >= D.ui.catchZone.recalcMs) { c = catchCache[n.id] = { ts: now, info: game.catchInfo(n) }; }
       return c.info;
     }
+    function behindForeground(el, cx, cy) {
+      if (el.dataset.kind !== 'npc' && el.dataset.kind !== 'hero') return false;
+      return global.BomzhArt && global.BomzhArt.foregroundCoversPoint(cx, cy, parseFloat(el.style.top) / game.field.h);
+    }
     /* Прохожий, в чью зону попала точка экрана (ближайший к курсору), или null. Зона — круг вокруг фигурки радиусом catchZone.factor × её радиус.
        score — расстояние до центра в долях радиуса зоны (0 — в центре, 1 — на границе): им зона спорит с местами, см. pickAt. */
     function walkerAt(cx, cy) {
@@ -2756,7 +3038,7 @@
         sh = el.children[0].offsetHeight || 60;                     // фигурка — вверху плитки
         R = Math.max(Z.minRadiusPx, sh / 2 * Z.factor);
         d = Math.sqrt(Math.pow(cx - (r.left + r.width / 2), 2) + Math.pow(cy - (r.top + sh / 2), 2));
-        if (d <= R && d < bd) { bd = d; best = n; bs = d / R; }
+        if (d <= R && d < bd && !behindForeground(el, cx, cy)) { bd = d; best = n; bs = d / R; }
       }
       return best ? { n: best, score: bs } : null;
     }
@@ -2780,14 +3062,14 @@
       if (pl) return { kind: 'place', id: pl.id };
       return null;
     }
-    function directTile(target) {
+    function directTile(target, cx, cy) {
       var el = target && target.closest ? target.closest('.tile') : null;
-      return el && !el.classList.contains('gone') ? el : null;
+      return el && !el.classList.contains('gone') && !behindForeground(el, cx, cy) ? el : null;
     }
     function updateHot() {
       var hot = null, t = lastPt && lastPt.target, el;
       if (lastPt && lastPt.inField && started && !invDrag && !game.state.over && !(t.closest && t.closest('.sleep-btn, #shop-menu'))) {
-        el = directTile(t);
+        el = directTile(t, lastPt.x, lastPt.y);
         if (!el || el.classList.contains('walker') || el.dataset.kind === 'hero') { var pk = pickAt(lastPt.x, lastPt.y); hot = pk && pk.kind === 'npc' ? pk.n : null; }
       }
       var id = hot ? hot.id : 0;
@@ -3033,7 +3315,7 @@
           el.classList.toggle('trash', !!n.trash);
           var cst = catchOf(n).status;
           if (el.dataset.catch !== cst) el.dataset.catch = cst;
-          if (n.asked && !el.classList.contains('asked')) { el.classList.add('asked'); el.children[1].textContent = game.npcName(n) + ' · ' + D.tips.askedMark; }
+          if ((n.asked || n.spoken) && !el.classList.contains('asked')) { el.classList.add('asked'); el.children[1].textContent = game.npcName(n) + ' · ' + D.tips.askedMark; }
         } else {
           el.classList.toggle('flip', n.dir === 1);
         }
@@ -3056,6 +3338,21 @@
         busEl.classList.toggle('stopped', S.bus.state === 'stop');
         place(busEl, S.bus.x, D.walkers.bus.y);
       } else if (busEl) { if (busEl.parentNode) busEl.parentNode.removeChild(busEl); busEl = null; }
+      if (S.traffic) {
+        if (!trafficEl) {
+          trafficEl = document.createElement('div');
+          trafficEl.id = 'road-traffic';
+          trafficEl.setAttribute('aria-hidden', 'true');
+          trafficEl.innerHTML = '<span class="traffic-body"></span>';
+          elTiles.appendChild(trafficEl);
+        }
+        trafficEl.dataset.kind = S.traffic.kind;
+        trafficEl.dataset.dir = S.traffic.dir;
+        place(trafficEl, S.traffic.x, S.traffic.y);
+      } else if (trafficEl) {
+        trafficEl.remove();
+        trafficEl = null;
+      }
       for (key in tileEls) {
         if (!seen[key]) {
           if (nearEl === tileEls[key]) nearEl = null;
@@ -3102,6 +3399,7 @@
 
       /* меню ларька / палатки, блок «Надето» */
       renderMenu();
+      renderDialogue();
       renderGear();
 
       renderWarn();
@@ -3281,7 +3579,7 @@
     function tipFromEvent(e) {
       tip = null;
       if (invDrag || !game || game.state.over || e.pointerType === 'touch') return;
-      var t = e.target, el = t && t.closest ? t.closest('.tile, .inv-item') : null;
+      var t = e.target, el = t && t.closest ? t.closest('.inv-item') || directTile(t, e.clientX, e.clientY) : null;
       if (t && t.closest && t.closest('#clock')) { tip = { kind: 'clock', id: 0, x: e.clientX, y: e.clientY }; return; }
       var wr = elWeather.getBoundingClientRect();           // плашка погоды мышь не ловит (pointer-events), поэтому по прямоугольнику
       if (e.clientX >= wr.left && e.clientX <= wr.right && e.clientY >= wr.top && e.clientY <= wr.bottom) { tip = { kind: 'weather', id: 0, x: e.clientX, y: e.clientY }; return; }
@@ -3418,6 +3716,88 @@
       return null;
     }
 
+    function renderDialogueSkill(el, name, skill, gained) {
+      var ui = D.ui.dialogue;
+      el.children[0].textContent = name + ' · ' + ui.level + ' ' + skill.level;
+      el.children[1].textContent = ui.experience + ' ' + skill.xp + (skill.nextLevelXp === null ? '' : ' / ' + skill.nextLevelXp) +
+        (gained ? ' (+' + gained + ')' : '');
+      el.children[2].textContent = skill.nextCard ? ui.next + ' — «' + skill.nextCard + '»' : '';
+    }
+
+    function renderDialogue() {
+      if (!started || game.state.over || !game.state.begging.dialog || gameMenuOpen || slotMode) {
+        if (dialoguePanel.open) dialoguePanel.close();
+        dialogueSig = '';
+        return;
+      }
+      var state = game.state.begging, sig = [state.dialog.npcId, state.dialog.used, state.dialog.question, state.xp, state.socialXp].join('|');
+      if (sig === dialogueSig) return;
+      var view = game.begView();
+      dialogueSig = sig;
+      var ui = D.ui.dialogue;
+      $('dialogue-context').textContent = ui.context;
+      $('dialogue-title').textContent = view.name;
+      var rows = { student: 0, worker: 3, coat: 6, fat: 9, drunk: 12, granny: 15 };
+      dialoguePanel.style.setProperty('--portrait-row', ((rows[view.kind] || 0) * 100 / 21) + '%');
+      var feedback = $('dialogue-feedback');
+      if (view.exchange) {
+        feedback.innerHTML = '<strong>' + esc(D.hero.name) + '</strong> — ' + esc(view.exchange.line) +
+          '<br><strong>' + esc(view.name) + '</strong> — ' + esc(view.exchange.reply);
+        if (view.feedback !== view.exchange.reply) {
+          feedback.innerHTML += '<br><strong>' + esc(view.name) + '</strong> — ' + esc(view.feedback);
+        }
+      } else feedback.textContent = view.feedback;
+      renderDialogueSkill($('dialogue-social-skill'), ui.social, view.skills.social, view.socialGain);
+      renderDialogueSkill($('dialogue-beg-skill'), ui.skill, view.skills.begging, 0);
+      var endings = { ask: 1, goodbye: 2 };
+      var cards = view.cards.sort(function (a, b) { return (endings[a.id] || 0) - (endings[b.id] || 0); });
+      dialogueCards.innerHTML = cards.map(function (card) {
+        var odds = card.id === 'ask' ? ' <span id="dialogue-chance">' + esc(ui.chance) + ' ' + Math.round(view.chance * 100) + '%</span>' : '';
+        return '<button type="button" data-dialogue-card="' + esc(card.id) + '"' + (card.enabled ? '' : ' disabled') +
+          '><strong>' + esc(card.label) + '</strong>' + (card.line ? '<small>' + esc(card.line) + '</small>' : '') +
+          '<small>' + esc(card.description) + odds + '</small></button>';
+      }).join('');
+      if (!dialoguePanel.open) {
+        dialogueResult.hidden = true;
+        endInvDrag(); keysDown = {}; game.setMoveDir(0, 0);
+        tip = null; hideTip();
+        dialoguePanel.showModal();
+        $('dialogue-title').focus({ preventScroll: true });
+      } else {
+        $('dialogue-feedback').focus({ preventScroll: true });
+      }
+    }
+
+    function chooseDialogueCard(id) {
+      var result = game.playBegCard(id);
+      if (result && typeof result === 'object') {
+        var ui = D.ui.dialogue;
+        var summary = dialogueResult.firstElementChild;
+        if (result.exchange) {
+          summary.innerHTML = '<b>' + esc(D.hero.name) + '</b> — ' + esc(result.exchange.line) +
+            '<br><b>' + esc(result.exchange.name) + '</b> — ' + esc(result.exchange.reply) +
+            (result.text ? '<br><b>' + esc(result.text) + '</b>' : '');
+        } else summary.textContent = result.text;
+        var growth = [];
+        if (result.socialGain) growth.push(ui.social + ' +' + result.socialGain);
+        if (result.xpGain) growth.push(ui.skill + ' +' + result.xpGain);
+        if (result.unlocked.length) growth.push(ui.unlocked + ' «' + result.unlocked.join('», «') + '»');
+        dialogueResult.lastElementChild.textContent = growth.join(' · ');
+        dialogueResult.hidden = false;
+        clearTimeout(dialogueResultTimer);
+        dialogueResultTimer = setTimeout(function () { dialogueResult.hidden = true; }, result.exchange ? ui.askResultMs : ui.resultMs);
+      }
+      render();
+    }
+    dialoguePanel.addEventListener('cancel', function (e) {
+      e.preventDefault();
+      chooseDialogueCard('goodbye');
+    });
+    dialogueCards.addEventListener('click', function (e) {
+      var card = e.target.closest('button[data-dialogue-card]');
+      if (card && !card.disabled && dialoguePanel.open) chooseDialogueCard(card.dataset.dialogueCard);
+    });
+
     function showEnd() {
       var S = game.state, o = S.over, E = D.endTexts;
       endShown = true;
@@ -3449,7 +3829,7 @@
       var t = e.target;
       if (t.closest && t.closest('.sleep-btn, #shop-menu, #stash')) return;
       if (game.state.menuOpen) { game.closeMenu(); render(); return; }  // клик мимо открытого меню — только закрыть его, бомж стоит где стоял
-      var el = directTile(t);
+      var el = directTile(t, e.clientX, e.clientY);
       /* Прямой клик по предмету или менту — как раньше. Всё остальное сначала отдаём зоне прохожего: ближайший к курсору. */
       if (el && !el.classList.contains('walker') && el.dataset.kind !== 'hero') { game.order({ kind: el.dataset.kind, id: parseInt(el.dataset.id, 10) }); render(); return; }
       var pk = pickAt(e.clientX, e.clientY);
@@ -3550,13 +3930,14 @@
       elPauseBtn.blur();
     });
     document.addEventListener('keydown', function (e) {
-      if (slotMode || !started || game.state.over || document.querySelector('dialog[open]')) return;
+      if (gameMenuOpen || slotMode || !started || game.state.over || document.querySelector('dialog[open]')) return;
       if (e.code === 'Space' || e.key === ' ') {
         e.preventDefault();
         if (!e.repeat && !game.state.over) setPaused(!paused, 'key');
         return;
       }
       if (e.code === 'Escape' && game.state.menuOpen) { e.preventDefault(); game.closeMenu(); render(); return; }
+      if (e.code === 'Escape' && !e.repeat) { e.preventDefault(); openGameMenu(); return; }
       if (MOVE_KEYS[e.code]) {
         e.preventDefault();
         if (!keysDown[e.code]) { keysDown[e.code] = true; applyMoveKeys(); }
@@ -3576,8 +3957,8 @@
     });
     /* Окно потеряло фокус или вкладка скрыта — пауза. Возврат паузу НЕ снимает: игрок снимает её сам. */
     function awayPause() {
-      if (slotMode && slotWasRunning) {
-        slotWasRunning = false;
+      if (menuWasRunning) {
+        menuWasRunning = false;
         awayPaused = true;
         setPaused(true, 'away');
       }
@@ -3586,18 +3967,12 @@
       setPaused(true, 'away');
     }
     global.addEventListener('blur', function () { if (game && started) game.recEvent('blur', { hidden: document.hidden ? 1 : 0 }); keysDown = {}; if (game) game.setMoveDir(0, 0); awayPause(); flushRec(); });
-    document.addEventListener('visibilitychange', function () { if (document.hidden) { if (game && started) game.recEvent('blur', { hidden: 1 }); keysDown = {}; if (game) game.setMoveDir(0, 0); awayPause(); flushRec(); } });
+    document.addEventListener('visibilitychange', function () { if (document.hidden) { if (game && started) game.recEvent('blur', { hidden: 1 }); keysDown = {}; if (game) game.setMoveDir(0, 0); awayPause(); persistOnExit(); } });
     elRestart.addEventListener('click', function () { newGame(); });
     global.addEventListener('resize', function () { fieldSize(); render(); });
 
-    /* =====================================================================
-     *  ПРАВКА 017: хранение записи, выгрузка файлом, сохранение, окно «Записи»
-     *  Хранилище — localStorage (синхронное: успевает при закрытии вкладки; работает по file://).
-     *  Запись забега: bomzh.rec.<id>.h — шапка, итог, телеметрия; bomzh.rec.<id>.c<N> — куски событий по record.chunk;
-     *  bomzh.recIndex — список забегов (новые сверху, не больше record.keepRuns); bomzh.save — слот сохранения; bomzh.recExport — режим выгрузки.
-     * ===================================================================== */
-    var RD = D.record, RK = RD.keys, Core = global.BomzhCore;
-    var store = { flushed: 0, lastTs: 0, broken: false, fullNoted: false, overDone: false, lastPhase: 0 };
+    var RD = D.record, RK = RD.keys;
+    var store = { flushed: 0, lastTs: 0, broken: false, lastAutoState: null, overDone: false, lastPhase: 0 };
     function lsGet(k) { try { return global.localStorage.getItem(k); } catch (e) { return null; } }
     function lsSet(k, v) { try { global.localStorage.setItem(k, v); return true; } catch (e) { return false; } }
     function lsDel(k) { try { global.localStorage.removeItem(k); } catch (e) { /* нет хранилища */ } }
@@ -3621,7 +3996,6 @@
       for (var i = 0; i <= RD.keepRuns + 1; i++) {
         if (lsSet(k, v)) return true;
         if (!evictOldest()) return false;
-        if (!store.fullNoted && game) { store.fullNoted = true; game.note('recFull'); }
       }
       return false;
     }
@@ -3647,110 +4021,6 @@
       for (var c = 0; c < m.chunks; c++) { var part = lsJson(runKey(id, 'c' + c)); if (part) evs = evs.concat(part); }
       return { format: RD.format, formatVersion: RD.formatVersion, head: m.head, events: evs.slice(0, m.n), lost: m.lost || [], end: m.end, tele: m.tele };
     }
-    function pad2(v) { return (v < 10 ? '0' : '') + v; }
-    function stamp(iso) { var d = new Date(iso); return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()) + '_' + pad2(d.getHours()) + '-' + pad2(d.getMinutes()); }
-    function fileName(f) { return 'bomzh_zapis_' + stamp(f.head.started) + '_sutki' + (f.head.day || 1) + '.json'; }   // латиницей: кириллица в имени скачивания местами ломается
-    /* Скачать файл записи. Если браузер запретил автоматические загрузки — просто ничего не произойдёт; игру это не ломает */
-    function downloadRec(f, why, name) {
-      if (!f) return false;
-      try {
-        var blob = new Blob([Core.recText(f)], { type: 'application/json' });
-        var a = document.createElement('a');
-        a.href = URL.createObjectURL(blob);
-        a.download = name || fileName(f);
-        a.style.display = 'none';
-        document.body.appendChild(a);
-        a.click();
-        setTimeout(function () { URL.revokeObjectURL(a.href); if (a.parentNode) a.parentNode.removeChild(a); }, 4000);
-        if (game && game.rec && f.head.id === curId()) { game.recEvent('export', { why: why }); if (why !== 'list') game.note('recExported', { n: f.head.day || 1 }); }
-        return true;
-      } catch (e) { return false; }
-    }
-
-    /* ---------- папка для записей (правка 021): File System Access API ----------
-     *  Дескриптор папки лежит в IndexedDB. После перезапуска доступ надо подтвердить жестом пользователя (requestPermission),
-     *  поэтому подтверждение ловится на кликах по стартовой карточке и окну «Записи». Один файл на забег (имя без суток), перезаписывается. */
-    var dirState = { handle: null, name: '', perm: 'none', lastOk: 0, lastDay: 0, lastWhere: '', reason: '', queue: Promise.resolve(), noKeep: false };
-    var DIR_API = !!(global.showDirectoryPicker && global.indexedDB);
-    function idb(fn) {
-      return new Promise(function (res, rej) {
-        var rq;
-        try { rq = global.indexedDB.open('bomzh', 1); } catch (e) { rej(e); return; }
-        rq.onupgradeneeded = function () { rq.result.createObjectStore('kv'); };
-        rq.onerror = function () { rej(rq.error); };
-        rq.onsuccess = function () {
-          var db = rq.result, out;
-          try { out = fn(db.transaction('kv', 'readwrite').objectStore('kv')); } catch (e) { db.close(); rej(e); return; }
-          out.onsuccess = function () { db.close(); res(out.result); };
-          out.onerror = function () { db.close(); rej(out.error); };
-        };
-      });
-    }
-    function dirName(f) { return 'bomzh_zapis_' + stamp(f.head.started) + (f.head.parentId ? '_' + f.head.id : '') + '.json'; }
-    function dirQuery() {
-      if (!dirState.handle) { dirState.perm = 'none'; return Promise.resolve(); }
-      return dirState.handle.queryPermission({ mode: 'readwrite' }).then(function (p) { dirState.perm = p; }, function () { dirState.perm = 'prompt'; });
-    }
-    function dirLoad() {
-      if (!DIR_API) return;
-      idb(function (st) { return st.get('recDir'); }).then(function (h) {
-        if (!h) return;
-        dirState.handle = h; dirState.name = h.name;
-        return dirQuery();
-      }).then(function () { if (recOpen()) renderRecWindow(); }, function () { /* нет IndexedDB — живём без папки */ });
-    }
-    function dirAllow() {                               // только из обработчика клика
-      if (!dirState.handle || dirState.perm === 'granted') return;
-      dirState.perm = 'asking';
-      dirState.handle.requestPermission({ mode: 'readwrite' }).then(function (p) { dirState.perm = p; if (recOpen()) renderRecWindow(); }, function () { dirState.perm = 'prompt'; });
-    }
-    function dirPick() {
-      if (!DIR_API) return;
-      global.showDirectoryPicker({ id: 'bomzh-rec', mode: 'readwrite' }).then(function (h) {
-        dirState.handle = h; dirState.name = h.name; dirState.perm = 'granted'; dirState.reason = ''; dirState.noKeep = false;
-        if (game) game.recEvent('recDir', { on: 1 });
-        renderRecWindow();
-        idb(function (st) { return st.put(h, 'recDir'); }).catch(function () { dirState.noKeep = true; renderRecWindow(); });
-        if (game && game.rec && started) saveRec(game.recFile(), 'dir');   // сразу положить текущую запись в новую папку
-      }, function (e) { if (!e || e.name !== 'AbortError') { dirState.reason = 'pick'; renderRecWindow(); } });
-    }
-    function dirForget() {
-      dirState.handle = null; dirState.name = ''; dirState.perm = 'none'; dirState.reason = '';
-      idb(function (st) { return st.delete('recDir'); }).catch(function () {});
-      renderRecWindow();
-    }
-    function dirWrite(f) {
-      var h = dirState.handle, name = dirName(f), text = Core.recText(f);
-      return h.getFileHandle(name, { create: true }).then(function (fh) { return fh.createWritable(); }).then(function (w) {
-        return w.write(text).then(function () { return w.close(); });
-      }).then(function () { return name; });
-    }
-    /* Записать файл: в папку, если можно; иначе скачиванием (и в окне «Записи» видно, почему) */
-    function saveRec(f, why) {
-      if (!f) return;
-      var day = f.head.day || 1;
-      function viaDownload(reason) {
-        dirState.reason = reason;
-        var ok = downloadRec(f, why);
-        if (ok) { dirState.lastOk = Date.now(); dirState.lastDay = day; dirState.lastWhere = 'dl'; }
-        if (recOpen()) renderRecWindow();
-      }
-      if (!DIR_API) { viaDownload(''); return; }
-      if (!dirState.handle) { viaDownload(''); return; }
-      dirState.queue = dirState.queue.then(function () {
-        if (dirState.perm !== 'granted') return dirQuery();
-      }).then(function () {
-        if (dirState.perm !== 'granted') { viaDownload('perm'); return; }
-        return dirWrite(f).then(function () {
-          dirState.lastOk = Date.now(); dirState.lastDay = day; dirState.lastWhere = 'dir'; dirState.reason = '';
-          if (f.head.id === curId()) { game.recEvent('export', { why: why, dir: 1 }); if (why !== 'list' && why !== 'dir') game.note('recSaved', { n: day }); }
-          if (recOpen()) renderRecWindow();
-        }, function () { viaDownload('fail'); });
-      });
-    }
-    function exportMode() { var m = lsGet(RK.mode); return RD.exportModes.indexOf(m) >= 0 ? m : RD.exportDefault; }
-    function exportCurrent(why) { if (!game || !game.rec) return; flushRec(); saveRec(game.recFile(), why); }
-
     /* Старый ключ сохраняет роль автослота. Каждая ручная ячейка записывается целиком одним setItem. */
     function slotKey(id) { return id === 'auto' ? RK.save : RK.save + '.' + id; }
     function slotName(id) { return id === 'auto' ? 'Автосохранение' : 'Ячейка ' + id; }
@@ -3773,20 +4043,25 @@
       return { save: sv };
     }
     function writeSave() {
-      if (!D.save.on || !game || game.state.over) return;
-      var sv = game.saveState();                        // событие «save» попадает в запись до сброса
+      if (!D.save.on || !started || !game || game.state.over || game.state.total <= 0 || slotMode === 'load') return;
+      var state = JSON.stringify(Object.assign({}, game.state, { sfx: [] }));
+      if (state === store.lastAutoState) return;
+      var sv = game.saveState();
       flushRec();
-      if (putRetry(RK.save, JSON.stringify(sv))) game.note('saveDone');
+      if (putRetry(RK.save, JSON.stringify(sv))) store.lastAutoState = state;
     }
-    function onOver() {                                 // конец забега: запись — в хранилище и файлом, слот — стереть
+    function persistOnExit() {
+      writeSave();
+      if (game && game.rec && game.rec.events.length !== store.flushed) flushRec();
+    }
+    function onOver() {
       if (store.overDone) return;
       store.overDone = true;
       flushRec();
       if (!D.save.keepAfterDeath) {
         var auto = readSlot('auto').save;
-        if (auto && (!auto.rec || auto.rec.head.id === curId())) lsDel(RK.save);
+        if (auto && auto.rec && auto.rec.head.id === curId()) lsDel(RK.save);
       }
-      if (exportMode() !== 'off') exportCurrent('end');
     }
     /* Продолжить сохранённый забег: игра пересоздаётся и встаёт на паузу. Хвост записи после сохранения уходит в lost. */
     function continueGame(sv, manual) {
@@ -3805,26 +4080,48 @@
       return true;
     }
 
+    var gameMenu = $('game-menu-modal'), menuBtn = $('game-menu-btn'), resumeBtn = $('game-menu-resume');
+    var gameMenuOpen = false, menuWasRunning = false;
+    function focusAfterLayout(button) { queueMicrotask(function () { button.focus(); }); }
+    function openGameMenu() {
+      if (!started || game.state.over || gameMenuOpen || slotMode || document.querySelector('dialog[open]')) return;
+      gameMenuOpen = true;
+      menuWasRunning = !paused;
+      if (menuWasRunning) setPaused(true, 'menu');
+      keysDown = {};
+      game.setMoveDir(0, 0);
+      gameMenu.classList.remove('hidden');
+      focusAfterLayout(resumeBtn);
+    }
+    function closeGameMenu(loaded) {
+      if (!gameMenuOpen) return;
+      gameMenuOpen = false;
+      gameMenu.classList.add('hidden');
+      if (menuWasRunning && !loaded && !document.hidden && !awayPaused) setPaused(false, 'menu');
+      menuWasRunning = false;
+      if (!loaded) focusAfterLayout(menuBtn);
+    }
+    menuBtn.addEventListener('click', openGameMenu);
+    resumeBtn.addEventListener('click', function () { closeGameMenu(false); });
+    gameMenu.addEventListener('click', function (e) { if (e.target === gameMenu) closeGameMenu(false); });
+
     var slotModal = $('save-modal'), slotList = $('save-list'), slotStatus = $('save-status');
-    var slotMode = '', slotOpener = null, slotWasRunning = false, slotConfirm = null;
+    var slotMode = '', slotOpener = null, slotConfirm = null;
     function openSlots(mode, opener) {
       if (slotMode || (mode === 'save' && (!started || game.state.over))) return;
       slotMode = mode; slotOpener = opener; slotConfirm = null;
-      slotWasRunning = started && !game.state.over && !paused;
-      if (slotWasRunning) setPaused(true, 'slots');
       if (started && Object.keys(keysDown).length) { keysDown = {}; game.setMoveDir(0, 0); }
       $('save-title').textContent = mode === 'save' ? 'Сохранить игру' : 'Загрузить игру';
       slotStatus.textContent = '';
       slotModal.classList.remove('hidden');
       drawSlots();
-      (slotList.querySelector('button:not(:disabled)') || $('save-close')).focus();
+      focusAfterLayout(slotList.querySelector('button:not(:disabled)') || $('save-close'));
     }
     function closeSlots(loaded) {
       slotModal.classList.add('hidden');
       slotMode = ''; slotConfirm = null;
-      if (slotWasRunning && !loaded && !document.hidden && !awayPaused) setPaused(false, 'slots');
-      slotWasRunning = false;
-      (loaded ? elPauseBtn : slotOpener).focus();
+      if (loaded) closeGameMenu(true);
+      focusAfterLayout(loaded ? elPauseBtn : slotOpener);
       slotOpener = null;
     }
     function drawSlots() {
@@ -3885,110 +4182,30 @@
     });
     slotModal.addEventListener('click', function (e) { if (e.target === slotModal) closeSlots(false); });
     document.addEventListener('keydown', function (e) {
-      if (!slotMode) return;
-      if (e.key === 'Escape') { e.preventDefault(); closeSlots(false); }
+      if (!slotMode && !gameMenuOpen) return;
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        if (!e.repeat) {
+          if (slotMode) closeSlots(false);
+          else closeGameMenu(false);
+        }
+      }
       else if (e.key === 'Tab') {
-        var buttons = slotModal.querySelectorAll('button:not(:disabled)'), first = buttons[0], last = buttons[buttons.length - 1];
+        var buttons = (slotMode ? slotModal : gameMenu).querySelectorAll('button:not(:disabled)'), first = buttons[0], last = buttons[buttons.length - 1];
         if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
         else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
       }
       e.stopImmediatePropagation();
     }, true);
 
-    /* ---------- окно «Записи» ---------- */
-    var elRec = $('rec-screen'), recPaused = false;
-    function endLabel(r) {
-      var U = D.recUi;
-      if (r.id === curId() && !(game && game.state.over)) return U.current;
-      if (!r.end) return U.unfinished;
-      return r.end.win ? U.win : (U.lose[r.end.cause] || U.lose.other);
-    }
-    function renderDirStatus() {
-      var U = D.recUi, ds = dirState, hasDir = !!ds.handle, need = hasDir && ds.perm !== 'granted';
-      $('rec-dir-block').classList.toggle('hidden', !DIR_API);
-      var where = !DIR_API ? U.whereNoApi : (hasDir ? U.whereDir.split('{name}').join(ds.name) : U.whereDl);
-      var last = ds.lastOk ? U.last.split('{t}').join(new Date(ds.lastOk).toTimeString().slice(0, 5)).split('{n}').join(ds.lastDay).split('{to}').join(ds.lastWhere === 'dir' ? U.toDir : U.toDl) : U.lastNone;
-      $('rec-where').textContent = where;
-      $('rec-last').textContent = last;
-      $('rec-why').textContent = need && !ds.reason ? U.why.perm : (ds.reason ? (U.why[ds.reason] || '') : (ds.noKeep ? U.why.idb : ''));
-      $('rec-dir').textContent = hasDir ? U.dirChange : U.dirPick;
-      $('rec-dir-ok').textContent = U.dirOk;
-      $('rec-dir-ok').classList.toggle('hidden', !need);
-      $('rec-dir-forget').textContent = U.dirForget;
-      $('rec-dir-forget').classList.toggle('hidden', !hasDir);
-    }
-    function renderRecWindow() {
-      var U = D.recUi, list = $('rec-list'), modes = $('rec-modes'), mode = exportMode();
-      modes.innerHTML = '';
-      RD.exportModes.forEach(function (m) {
-        var b = document.createElement('button');
-        b.type = 'button'; b.textContent = U.modes[m]; b.dataset.mode = m;
-        b.classList.toggle('active', m === mode);
-        b.addEventListener('click', function () { lsSet(RK.mode, m); if (game) game.recEvent('exportMode', { v: m }); renderRecWindow(); });
-        modes.appendChild(b);
-      });
-      $('rec-now').classList.toggle('hidden', !(game && game.rec && started));
-      renderDirStatus();
-      flushRec();
-      var runs = recIndex();
-      list.innerHTML = '';
-      if (!runs.length) { var li0 = document.createElement('li'); li0.textContent = U.empty[Math.floor(Math.random() * U.empty.length)]; list.appendChild(li0); }
-      runs.forEach(function (r) {
-        var li = document.createElement('li'), sp = document.createElement('span'), b = document.createElement('button');
-        sp.textContent = stamp(r.started).replace('_', ' ').replace(/-(\d\d)$/, ':$1') + ' · ' + U.day.split('{n}').join(r.day || 1) + ' · ' + endLabel(r);
-        b.type = 'button'; b.textContent = U.download;
-        b.addEventListener('click', function () { downloadRec(readRun(r.id), 'list'); });
-        li.appendChild(sp); li.appendChild(b); list.appendChild(li);
-      });
-    }
-    function openRec() {
-      recPaused = !!(game && started && !game.state.over && !paused);
-      if (recPaused) setPaused(true, 'records');
-      renderRecWindow();
-      elRec.classList.remove('hidden');
-    }
-    function closeRec() {
-      elRec.classList.add('hidden');
-      if (recPaused) setPaused(false, 'records');
-      recPaused = false;
-    }
-    function recOpen() { return !elRec.classList.contains('hidden'); }
-    (function buildRecUi() {
-      var U = D.recUi;
-      var rb = $('rec-btn'); rb.textContent = U.btn; rb.title = U.btnTitle; rb.setAttribute('aria-label', U.btnTitle);
-      rb.addEventListener('click', function () { rb.blur(); openRec(); });
-      $('start-rec-btn').textContent = U.btn + ' ' + U.title;
-      $('start-rec-btn').addEventListener('click', openRec);
-      $('end-rec-btn').textContent = U.btn + ' ' + U.download;
-      $('end-rec-btn').addEventListener('click', function () { exportCurrent('button'); });
-      $('rec-title').textContent = U.title;
-      $('rec-mode-title').textContent = U.modeTitle;
-      $('rec-list-title').textContent = U.listTitle;
-      $('rec-note').textContent = U.note;
-      var close = $('rec-close'); close.textContent = U.close; close.title = U.closeTitle;
-      close.addEventListener('click', closeRec);
-      elRec.addEventListener('click', function (e) { if (e.target === elRec) closeRec(); });
-      var intro = $('rec-intro'); U.intro.forEach(function (s) { var p = document.createElement('p'); p.textContent = s; intro.appendChild(p); });
-      $('rec-dir').addEventListener('click', dirPick);
-      $('rec-dir-ok').addEventListener('click', dirAllow);
-      $('rec-dir-forget').addEventListener('click', dirForget);
-      $('rec-dir-title').textContent = U.dirTitle;
-      dirLoad();
-      // подтверждение доступа к папке — только по действию пользователя: первый клик по стартовой карточке или окну записей
-      ['start-screen', 'rec-screen'].forEach(function (id) { $(id).addEventListener('click', function () { if (dirState.handle && dirState.perm === 'prompt') dirAllow(); }, true); });
-      $('rec-now').textContent = U.downloadNow;
-      $('rec-now').addEventListener('click', function () { exportCurrent('button'); renderRecWindow(); });
-    })();
     /* Кто отдаёт приказ — мышь или клавиатура, и на паузе ли (для записи). Ставится до любых обработчиков. */
     document.addEventListener('pointerdown', function () { if (game) game.setInput('mouse', paused); }, true);
     document.addEventListener('click', function () { if (game) game.setInput('mouse', paused); }, true);
     document.addEventListener('keydown', function (e) {
       if (game) game.setInput('key', paused);
-      if (recOpen() && e.code === 'Escape') { e.preventDefault(); e.stopImmediatePropagation(); closeRec(); }
-      else if (recOpen()) e.stopImmediatePropagation();   // под окном клавиши игры не работают (и пробел тоже: пауза под окном — его)
     }, true);
-    global.addEventListener('pagehide', flushRec);
-    global.addEventListener('beforeunload', flushRec);
+
+    global.addEventListener('pagehide', persistOnExit);
     global.addEventListener('focus', function () { if (game && started) game.recEvent('focus'); });
 
     /* ---------- цикл ---------- */
@@ -3996,11 +4213,10 @@
       var dt = lastTs ? (ts - lastTs) / 1000 : 0;
       lastTs = ts;
       if (dt > D.ui.maxFrameDt) dt = D.ui.maxFrameDt;
-      if (started && !paused && !game.state.over && dt > 0) { game.advance(dt); game.noteWarnings(); }
-      /* правка 017: рассвет — сохранение (и файл, если выбрано «каждое утро»); запись — в память браузера раз в flushSec */
+      if (started && !paused && !game.state.over && !game.state.begging.dialog && dt > 0) { game.advance(dt); game.noteWarnings(); }
       if (started && game.state.phase !== store.lastPhase) {
         store.lastPhase = game.state.phase;
-        if (game.state.phase % 2 === 0 && !game.state.over) { writeSave(); if (exportMode() === 'daily') exportCurrent('dawn'); }
+        if (game.state.phase % 2 === 0 && !game.state.over) writeSave();
       }
       if (started && ts - store.lastTs > D.record.flushSec * 1000) { store.lastTs = ts; flushRec(); }
       /* звук: снимок состояния и события кадра (sound.js может отсутствовать) */
@@ -4009,8 +4225,9 @@
         var hasFire = false;
         for (var fi = 0; fi < SS.items.length; fi++) if (SS.items[fi].type === 'fire') hasFire = true;
         global.BomzhSound.frame({
-          paused: paused || !started, speed: SS.speed, night: game.isNight(),
+          paused: paused || !started || !!SS.begging.dialog, speed: SS.speed, night: game.isNight(),
           wind: SS.weather.wind, precip: SS.weather.precip, type: SS.weather.type,
+          bus: SS.bus, listenerX: SS.hero.x, listenerY: SS.hero.y,
           walking: SS.hero.walking, walkSpeed: game.walkSpeed(), at: SS.hero.at,
           task: SS.hero.task ? SS.hero.task.kind : null, asleep: SS.hero.asleep,
           fire: hasFire, fireNear: hasFire && game.heat().parts.some(function (p) { return p.key === 'fire'; }),

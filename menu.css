@@ -66,7 +66,7 @@
 #start-btns #start-btn:hover, #start-btns #start-btn:focus-visible { background: #ffcf94; color: #231b17; }
 #start-stale { text-align: left; color: #fed8a6; margin-top: .75rem; }
 .menu-tools { display: flex; flex-wrap: wrap; gap: .3rem 1.2rem; margin-top: clamp(1rem, 4vh, 2.25rem); align-items: center; }
-.menu-tools button, .menu-tools #start-rec-btn, .menu-tools a {
+.menu-tools button, .menu-tools a {
   margin: 0; padding: .4rem 0; border: 0; color: #ece5d9; background: none;
   font: 500 .9rem/1.3 system-ui, sans-serif; text-decoration: underline; text-underline-offset: .25em; cursor: pointer;
 }
@@ -87,10 +87,10 @@
 #walk-controls :is(button,a):focus-visible { outline: 2px solid #ffd496; outline-offset: 1px; }
 #walk-controls button:disabled { opacity: .5; cursor: default; }
 .walk-preview #field .hero .tile-label { display: none; }
-#start-screen button:focus-visible, #save-modal button:focus-visible, .hud-file-btn:focus-visible {
+#start-screen button:focus-visible, #save-modal button:focus-visible, #game-menu-modal button:focus-visible, #game-menu-btn:focus-visible {
   outline: 2px solid #ffe0a9; outline-offset: 2px;
 }
-#menu-info-dialog, #save-panel {
+#menu-info-dialog, #save-panel, #game-menu-panel {
   box-sizing: border-box;
   width: min(33rem, calc(100vw - 2rem));
   max-height: calc(100dvh - 2rem);
@@ -103,12 +103,12 @@
   font: 1rem/1.5 system-ui, sans-serif;
   box-shadow: 0 1rem 4rem rgba(0,0,0,.48);
 }
-#menu-info-dialog::backdrop, #save-modal { background: rgba(9,14,17,.82); }
-#menu-info-dialog h2, #save-title { margin: 0 0 1rem; color: #f1d0a0; font: bold 1.8rem/1.1 Georgia, serif; }
+#menu-info-dialog::backdrop, #save-modal, #game-menu-modal { background: rgba(9,14,17,.82); }
+#menu-info-dialog h2, #save-title, #game-menu-title { margin: 0 0 1rem; color: #f1d0a0; font: bold 1.8rem/1.1 Georgia, serif; }
 #menu-info-dialog #start-how-title { color: inherit; border-color: #687174; }
 #menu-info-dialog li::marker { color: #e0ad78; }
 #menu-info-dialog #start-note { color: #c9c5b9; text-align: left; font-size: .8rem; }
-#menu-info-close, #save-close, #save-list button {
+#menu-info-close, #save-close, #save-list button, #game-menu-panel button {
   padding: .55em 1em;
   background: #364043;
   border: 1px solid #7b827c;
@@ -118,8 +118,72 @@
   cursor: pointer;
 }
 #menu-info-close { margin-top: .75rem; }
-#menu-info-close:hover, #save-close:hover, #save-list button:hover:enabled { background: #47504d; }
-#save-modal { position: absolute; inset: 0; z-index: 120; display: grid; place-items: center; }
+#menu-info-close:hover, #save-close:hover, #save-list button:hover:enabled, #game-menu-panel button:hover { background: #47504d; }
+#save-modal, #game-menu-modal { position: absolute; inset: 0; z-index: 120; display: grid; place-items: center; }
+#game-menu-modal { z-index: 110; }
+#game-menu-panel { display: grid; gap: .55rem; width: min(21rem, calc(100vw - 2rem)); }
+#game-menu-panel button { text-align: left; }
+#game-menu-panel #game-menu-resume { color: #291f14; background: #e6b97e; border-color: #f0ca92; font-weight: bold; }
+#game-menu-panel #game-menu-resume:hover { background: #f5ce97; }
+#dialogue-panel {
+  box-sizing: border-box; margin: auto; padding: 0; width: min(35rem, calc(100vw - 1.25rem));
+  max-height: calc(100dvh - 1.25rem); overflow: auto; overscroll-behavior: contain;
+  border: 1px solid #7c796e; border-radius: 4px; color: #eee8da; background: #252e30;
+  box-shadow: 0 12px 55px #080c10aa; font: clamp(15px,1.05vw,18px)/1.35 "Trebuchet MS", "Segoe UI", sans-serif;
+}
+#dialogue-panel::backdrop { background: rgba(11,17,21,.61); }
+.dialogue-head {
+  display: flex; align-items: center; gap: 1rem; padding: 12px 18px 0;
+  border-bottom: 2px solid #ad926a; background: linear-gradient(115deg,#495351,#263337);
+}
+.dialogue-portrait {
+  position: relative; align-self: end; width: 70px; height: 74px; flex: none; overflow: hidden;
+}
+.dialogue-portrait span {
+  position: absolute; left: 50%; transform: translateX(-50%); top: -5px; width: 148px; height: 185px;
+  background: url("npc-walk.webp") 0 var(--portrait-row,0%) / 500% 2200% no-repeat;
+}
+#dialogue-context { color: #c4c8bc; font-size: .82em; }
+#dialogue-title { margin: 2px 0 10px; font: bold 1.75em/1.1 Georgia, serif; }
+#dialogue-title:focus { outline: none; }
+.dialogue-body { padding: 14px 18px; }
+#dialogue-feedback { margin: 0 0 12px; padding-left: 10px; border-left: 2px solid #ad926a; font: italic 1.05em/1.4 Georgia, serif; color: #eee3c8; }
+#dialogue-feedback:empty { display: none; }
+#dialogue-cards { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 9px; margin: 10px 0 15px; }
+#dialogue-cards button {
+  display: block; text-align: left; padding: 12px; min-height: 76px; cursor: pointer; color: #28251c;
+  background: linear-gradient(115deg,#ebdfbd,#d9c9a4); border: 1px solid #c9b38d; border-radius: 3px;
+  box-shadow: inset 0 0 0 3px #fff3; font: inherit;
+}
+#dialogue-cards strong { display: block; font: bold 1.08em/1.15 Georgia, serif; }
+#dialogue-cards small { display: block; margin-top: 6px; font-size: .86em; line-height: 1.3; }
+#dialogue-cards button[data-dialogue-card="goodbye"] { background: #354044; color: #e4e6db; border-color: #788079; box-shadow: none; }
+#dialogue-cards button[data-dialogue-card="goodbye"]:hover { background: #46524e; }
+#dialogue-chance { font-weight: 700; white-space: nowrap; }
+#dialogue-cards button:hover:enabled { background: #f1e3bf; border-color: #fff1cf; }
+#dialogue-cards button:focus-visible { outline: 3px solid #e3a753; outline-offset: 2px; }
+#dialogue-cards button:disabled { background: #9c9c8c; color: #343931; box-shadow: none; cursor: default; }
+.dialogue-skills { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 10px; padding-top: 10px; border-top: 1px solid #59615d; font-size: .84em; }
+.dialogue-skill > * { display: block; }
+.dialogue-skill span { color: #d3c097; }
+.dialogue-skill small { margin-top: 3px; color: #bcc3bb; font-size: .95em; }
+.dialogue-skill small:empty, #dialogue-result span:empty { display: none; }
+#dialogue-result {
+  position: absolute; bottom: 22%; left: 50%; transform: translateX(-50%); z-index: 70;
+  width: max-content; max-width: min(32rem,90vw); box-sizing: border-box; pointer-events: none;
+  border: 1px solid #9b8767; border-left: 4px solid #d7b477; border-radius: 3px;
+  background: #263031f5; color: #f2ecdd; padding: 10px 14px; box-shadow: 0 3px 18px #1118;
+}
+#dialogue-result strong, #dialogue-result span { display: block; }
+#dialogue-result strong { font-weight: normal; line-height: 1.4; }
+#dialogue-result span { margin-top: 4px; font-size: .86em; color: #e7c988; }
+@media (max-width: 430px), (max-height: 520px) {
+  .dialogue-head { padding: 7px 12px 0; }
+  .dialogue-portrait { height: 53px; }
+  .dialogue-body { padding: 10px 12px; }
+  #dialogue-cards { gap: 6px; margin-bottom: 10px; }
+  #dialogue-cards button { min-height: 54px; padding: 9px; }
+}
 #save-list { display: grid; gap: .45rem; }
 #save-list button { width: 100%; text-align: left; }
 #save-list button:disabled { opacity: .6; cursor: default; }
@@ -130,22 +194,16 @@
   color: #211d17; background: #cfba94; border: 1px solid #574837; border-radius: 3px;
   cursor: pointer; font: inherit; padding: .5rem 1rem;
 }
-.hud-file-btn {
-  display: grid; place-items: center; padding: 0; width: 30px; height: 30px;
+#game-menu-btn {
+  flex: none; min-height: 30px; padding: 3px 10px; font: bold .9rem/1.2 "Trebuchet MS", sans-serif;
   background: #242d32; border: 1px solid #6a7476; border-radius: 3px; color: #ece3cf; cursor: pointer;
 }
-.hud-file-btn:hover { background: #3c484b; }
-.hud-file-btn svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linejoin: round; }
+#game-menu-btn:hover { background: #3c484b; }
 @media (max-width: 1200px) {
   #hud { overflow-x: auto; scrollbar-width: thin; }
-  #hud .hud-file-btn {
-    position: fixed; top: calc(var(--top-h) + 5px); width: 36px; height: 36px;
-    box-shadow: 0 2px 6px rgba(0,0,0,.48);
+  #game-menu-btn {
+    order: -1; position: sticky; left: 0; z-index: 1;
   }
-  #manual-save-btn { right: 46px; }
-  #manual-load-btn { right: 6px; }
-  #field.painted-courtyard ~ #hud #manual-save-btn { right: auto; left: 6px; }
-  #field.painted-courtyard ~ #hud #manual-load-btn { right: auto; left: 46px; }
 }
 @media (max-width: 650px) {
   #start-screen {

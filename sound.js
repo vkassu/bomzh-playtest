@@ -1,4 +1,4 @@
-/* «Бомж» — звук. Всё синтезируется через Web Audio, файлов нет. Числа — в data.js (GAME_DATA.sound).
+/* «Бомж» — звук. Синтез Web Audio и записи двора, подъезда и автобуса. Числа — в data.js (GAME_DATA.sound).
    На симуляцию не влияет: game.js раз в кадр отдаёт сюда снимок состояния и список событий.
    Нет Web Audio — игра работает молча. */
 (function (global) {
@@ -9,7 +9,7 @@
   var AC = global.AudioContext || global.webkitAudioContext;
   function noop() {}
   var api = {
-    available: !!(AC && CFG), unlock: noop, frame: noop, setEnabled: noop, setVolume: noop,
+    available: !!(AC && CFG), unlock: noop, frame: noop, resetScene: noop, setEnabled: noop, setVolume: noop,
     debug: function () { return { available: false }; }, renderOffline: null
   };
   global.BomzhSound = api;
@@ -189,7 +189,7 @@
     }
 
     /* Раз в кадр: снимок состояния игры -> погодный фон, шаги, костёр, бак */
-    E.tick = function (dt, s) {
+    E.tick = function (dt, s, recordedStep, userLevel) {
       if (s.over) {
         if (s.over !== lastOver) {
           set(amb.gain, 0, 0.04);
@@ -239,7 +239,8 @@
         timers.step -= dt;
         if (timers.step <= 0) {
           timers.step = Math.max(CFG.steps.minInterval, CFG.steps.stride / Math.max(0.01, s.walkSpeed * (s.speed || 1)));
-          stepFoot = -stepFoot; play('step', { foot: stepFoot });
+          stepFoot = -stepFoot;
+          if (!recordedStep || !recordedStep(userLevel, s.speed || 1)) play('step', { foot: stepFoot });
         }
       } else timers.step = Math.min(timers.step, 0.05);
       /* бак: шорох, изредка грохот */
@@ -259,7 +260,178 @@
   /* =====================================================================
    *  Живой звук: включение по первому действию, кнопка, громкость, вкладка
    * ===================================================================== */
-  var ctx = null, engine = null, lastT = 0, lastSnap = null;
+  /* Записи читаются как медиа и при открытии index.html с диска. */
+  function sample(file, loop) {
+    var media = new global.Audio();
+    media.loop = loop;
+    media.preload = 'auto';
+    media.volume = 0;
+    media.src = file;
+    return { media: media, pending: false, blocked: false, failed: false };
+  }
+  function playSample(track) {
+    if (!track.media.paused || track.pending || track.blocked) return;
+    track.pending = true;
+    track.media.play().then(function () { track.pending = false; }, function (err) {
+      track.pending = false;
+      if (err.name === 'NotAllowedError') track.blocked = true;
+      if (err.name === 'NotSupportedError') track.failed = true;
+    });
+  }
+  function quietSample(track) {
+    track.media.volume = 0;
+    if (!track.media.paused) track.media.pause();
+  }
+  function unavailable(track) { return track.failed || track.media.error; }
+  function sampleLevel(level) { return level * CFG.master * CFG.outputTrim; }
+  function approach(value, target, step) {
+    return value + Math.max(-step, Math.min(step, target - value));
+  }
+
+  function BusAudio() {
+    var B = D.walkers.bus, cfg = CFG.bus, tracks = {}, door = null, presence = 0, idleMix = 0;
+    var keys = Object.keys(cfg.files);
+    keys.forEach(function (key) {
+      tracks[key] = sample(cfg.files[key], key === 'drive' || key === 'idle');
+    });
+    function loop(track, volume) {
+      if (volume > 0) { track.media.volume = volume; playSample(track); }
+      else quietSample(track);
+    }
+    this.unlock = function () { keys.forEach(function (key) { tracks[key].blocked = false; }); };
+    this.quiet = function (forgetDoor) {
+      keys.forEach(function (key) { quietSample(tracks[key]); });
+      if (forgetDoor) { door = null; presence = 0; }
+    };
+    this.reset = function () {
+      this.quiet(true);
+      idleMix = 0;
+    };
+    this.frame = function (dt, snap, events, level) {
+      var usable = !keys.some(function (key) { return unavailable(tracks[key]); });
+      if (!usable || !on('events') || snap.over) { this.reset(); return false; }
+      if (!level) return true;
+      var bus = snap.bus, speed = snap.speed || 1, target = 0;
+      if (bus) {
+        var distance = Math.hypot(bus.x - snap.listenerX, B.y - snap.listenerY);
+        var edge = Math.min(Math.abs(bus.x - B.startX), Math.abs(bus.x - B.endX));
+        target = Math.max(0, 1 - distance / cfg.range) * Math.min(1, edge / cfg.edgeFade);
+        if (snap.at === 'entrance') target *= CFG.indoor.gainMult;
+      }
+      var step = dt * speed / cfg.fadeSeconds;
+      var idle = bus && bus.state === 'stop' ? 1 : 0;
+      idleMix = presence ? approach(idleMix, idle, step) : idle;
+      presence = approach(presence, target, step);
+      var volume = sampleLevel(level) * CFG.sfx * presence;
+      loop(tracks.drive, volume * cfg.engineGain * (1 - idleMix));
+      loop(tracks.idle, volume * cfg.engineGain * idleMix);
+      for (var i = 0; i < events.length; i++) {
+        var key = events[i].key;
+        var nextDoor = key === 'busDoorsOpen' ? tracks.open : key === 'busGo' ? tracks.close : null;
+        if (!nextDoor) continue;
+        if (door) quietSample(door);
+        door = nextDoor;
+        door.media.currentTime = 0;
+      }
+      if (door && (door.media.ended || (!bus && !presence))) { quietSample(door); door = null; }
+      if (door) {
+        door.media.playbackRate = speed;
+        door.media.volume = volume * cfg.doorGain;
+        playSample(door);
+      }
+      return true;
+    };
+  }
+
+  function CourtyardAudio() {
+    var cfg = CFG.courtyard, outdoor = sample(cfg.outdoor, true), indoor = sample(cfg.indoor, true);
+    var steps = cfg.steps.map(function (file) { return sample(file, false); });
+    var opening = sample(cfg.open, false), closing = sample(cfg.close, false);
+    var tracks = [outdoor, indoor, opening, closing].concat(steps);
+    var insideMix = null, stepIndex = 0, door = null, passLeft = null;
+
+    function alignPhase(from, to) {
+      var gap = Math.abs(from.currentTime - to.currentTime);
+      if (gap > cfg.syncDrift && gap < from.duration - cfg.syncDrift) to.currentTime = from.currentTime;
+    }
+    function ambience(dt, target, volume) {
+      var out = outdoor.media, inside = indoor.media;
+      if (unavailable(outdoor) || unavailable(indoor) || out.readyState < 2 || inside.readyState < 2) {
+        quietSample(outdoor); quietSample(indoor);
+        return;
+      }
+      if (insideMix === null) insideMix = target;
+      if (insideMix === 0 && !inside.seeking) alignPhase(out, inside);
+      if (insideMix === 1 && !out.seeking) alignPhase(inside, out);
+      var next = target ? inside : out;
+      if (!next.seeking) insideMix = approach(insideMix, target, dt / cfg.fadeSeconds);
+      out.volume = volume * cfg.gain * (1 - insideMix);
+      inside.volume = volume * cfg.gain * CFG.indoor.gainMult * insideMix;
+      // Обе петли идут даже при нулевой громкости, чтобы сохранить фазу.
+      playSample(outdoor); playSample(indoor);
+    }
+    function cue(track) {
+      if (door) quietSample(door);
+      door = unavailable(track) ? null : track;
+      if (door) door.media.currentTime = 0;
+    }
+    function doorEvents(dt, speed, events) {
+      if (passLeft !== null) {
+        passLeft -= dt * speed;
+        if (passLeft <= 0) { passLeft = null; cue(closing); }
+      }
+      for (var i = 0; i < events.length; i++) {
+        var key = events[i].key;
+        if (key === 'entranceDoorPass') {
+          if (passLeft === null) cue(opening);
+          passLeft = cfg.passSeconds;
+        } else if (key === 'entranceDoorOpen') {
+          if (passLeft === null) cue(opening);
+          passLeft = null;
+        } else if (key === 'entranceDoorClose') {
+          passLeft = null;
+          cue(closing);
+        }
+      }
+    }
+    this.unlock = function () { tracks.forEach(function (track) { track.blocked = false; }); };
+    this.quiet = function (forget) {
+      tracks.forEach(quietSample);
+      if (forget) { insideMix = null; door = null; passLeft = null; }
+    };
+    this.reset = function () { this.quiet(true); stepIndex = 0; };
+    this.step = function (level, speed) {
+      if (!level) return true;
+      var track = steps[stepIndex];
+      stepIndex = (stepIndex + 1) % steps.length;
+      if (unavailable(track) || track.media.readyState < 2 || track.blocked) return false;
+      track.media.currentTime = 0;
+      track.media.playbackRate = speed;
+      track.media.volume = sampleLevel(level) * CFG.sfx * cfg.stepGain;
+      playSample(track);
+      return true;
+    };
+    this.frame = function (dt, snap, events, level) {
+      if (snap.over) { this.reset(); return; }
+      if (!level) return;
+      var volume = sampleLevel(level), speed = snap.speed || 1;
+      ambience(dt, snap.at === 'entrance' ? 1 : 0, volume * CFG.ambience);
+      var effects = volume * CFG.sfx;
+      steps.forEach(function (track) { if (!track.media.paused) track.media.volume = effects * cfg.stepGain; });
+      if (!on('events')) return;
+      doorEvents(dt, speed, events);
+      if (door && door.media.ended) door = null;
+      if (door) {
+        var entry = D.places.entrance;
+        var distance = Math.hypot(entry.x - snap.listenerX, entry.y - snap.listenerY);
+        door.media.playbackRate = speed;
+        door.media.volume = effects * cfg.doorGain * Math.max(0, 1 - distance / cfg.doorRange);
+        playSample(door);
+      }
+    };
+  }
+
+  var ctx = null, engine = null, busAudio = null, courtyardAudio = null, lastT = 0, lastSnap = null;
   var prefs = { on: CFG.enabledByDefault, vol: CFG.volume };
   try {
     var saved = JSON.parse(global.localStorage.getItem(CFG.storageKey) || 'null');
@@ -269,16 +441,31 @@
   /* «Окно не активно»: вкладка скрыта ИЛИ окно потеряло фокус (Alt+Tab) — звук полностью молчит, включая погоду */
   var blurred = false;
   function away() { return !!document.hidden || blurred; }
+  function level() { return prefs.on && !away() && lastSnap && !lastSnap.paused ? prefs.vol : 0; }
   function applyLevel() {
     if (!engine) return;
-    var v = prefs.on && !away() && lastSnap && !lastSnap.paused ? prefs.vol : 0;
+    var v = level();
+    if (!v) {
+      var forget = !prefs.on || !prefs.vol;
+      if (busAudio) busAudio.quiet(forget);
+      if (courtyardAudio) courtyardAudio.quiet(forget);
+    }
     if (v) engine.user.gain.setTargetAtTime(v, ctx.currentTime, 0.08);
     else engine.user.gain.setValueAtTime(0, ctx.currentTime);
   }
   function unlock() {
     try {
-      if (!ctx) { ctx = new AC(); engine = new Engine(ctx); applyLevel(); }
-      if (ctx.state === 'suspended' && !away()) ctx.resume();
+      if (!ctx) {
+        ctx = new AC(); engine = new Engine(ctx);
+        if (typeof global.Audio === 'function') {
+          if (CFG.bus) busAudio = new BusAudio();
+          if (CFG.courtyard) courtyardAudio = new CourtyardAudio();
+        }
+        applyLevel();
+      }
+      if (busAudio) busAudio.unlock();
+      if (courtyardAudio) courtyardAudio.unlock();
+      if (ctx.state === 'suspended' && !away()) ctx.resume().catch(noop);
     } catch (e) { ctx = null; engine = null; }
   }
   function syncUi() {
@@ -287,6 +474,10 @@
     if (r) r.value = String(Math.round(prefs.vol * 100));
   }
   api.unlock = unlock;
+  api.resetScene = function () {
+    if (busAudio) busAudio.reset();
+    if (courtyardAudio) courtyardAudio.reset();
+  };
   api.setEnabled = function (v) { prefs.on = !!v; save(); applyLevel(); syncUi(); if (prefs.on && engine && on('ui')) engine.play('tick'); };
   api.setVolume = function (v) { prefs.vol = Math.max(0, Math.min(1, v)); if (prefs.vol > 0 && !prefs.on) prefs.on = true; save(); applyLevel(); syncUi(); };
   api.frame = function (snap, events) {
@@ -296,8 +487,15 @@
     if (!engine || ctx.state !== 'running' || away() || snap.paused) return;
     var now = ctx.currentTime, dt = Math.min(0.1, lastT ? now - lastT : 0.016);
     lastT = now;
-    engine.tick(dt, snap);
-    if (!snap.over) for (var i = 0; i < events.length; i++) engine.event(events[i], false);
+    var userLevel = level();
+    engine.tick(dt, snap, courtyardAudio && courtyardAudio.step, userLevel);
+    if (courtyardAudio) courtyardAudio.frame(dt, snap, events, userLevel);
+    var recordedBus = busAudio && busAudio.frame(dt, snap, events, userLevel);
+    if (!snap.over) for (var i = 0; i < events.length; i++) {
+      var ev = events[i];
+      if (recordedBus && (ev.key === 'busCome' || ev.key === 'busGo')) continue;
+      engine.event(ev, false);
+    }
   };
   api.debug = function () {
     return {
@@ -350,7 +548,7 @@
     }, true);
     function syncAway() {
       applyLevel();
-      if (ctx) { try { if (away()) ctx.suspend(); else ctx.resume(); } catch (e) { /* не критично */ } }
+      if (ctx) (away() ? ctx.suspend() : ctx.resume()).catch(noop);
     }
     document.addEventListener('visibilitychange', syncAway);
     global.addEventListener('blur', function () { blurred = true; syncAway(); });
