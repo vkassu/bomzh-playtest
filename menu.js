@@ -1,6 +1,5 @@
 (function () {
   'use strict';
-  if (document.documentElement.classList.contains('walk-preview')) return;
 
   var start = document.getElementById('start-screen');
   var dialog = document.getElementById('menu-info-dialog');
@@ -16,7 +15,7 @@
     });
   }
   bindPanel('menu-help-btn', 'menu-help', 'Как играть');
-  bindPanel('menu-about-btn', 'menu-about', 'О разработчиках');
+  bindPanel('menu-about-btn', 'menu-about', 'О создателях');
   bindPanel('menu-exit-btn', 'menu-exit', 'Выход из игры');
   document.getElementById('menu-info-close').addEventListener('click', function () { dialog.close(); });
 

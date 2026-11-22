@@ -46,19 +46,6 @@
     return svg(120, 88, b);
   }
 
-  // Обустройство внутри нарисованного лаза. Бетонные плиты уже есть на фоне.
-  function denInterior(stage) {
-    var layers = '<path d="M3 28l27-8 51 1 8 5-4 7-66 2z" fill="#a37d50" stroke="#5e4936"/>' +
-      '<path d="M11 28l27-5m-7 9l17-6m6 2l23-4" fill="none" stroke="#73573c"/>';
-    if (stage >= 2) layers += '<path d="M5 25l12-12 9 4 8-4 14 8-4 6-13-1-10 3z" fill="#776869" stroke="#49434a"/>' +
-      '<path d="M43 21l10-11 22 2-4 12z" fill="#b4ac95" stroke="#685f56"/><path d="M55 14l14 1m-16 2l12 1" stroke="#817b70"/>';
-    if (stage >= 3) layers += '<path d="M8 3l9 1-3 26-9 2zM19 2l9 1-2 25-9 1z" fill="#8f6d4e" stroke="#514437"/>' +
-      '<path d="M7 11l21-2m-22 13l20-2" stroke="#4b4135" stroke-width="2"/>';
-    if (stage >= 4) layers += '<path d="M65 16l15-2 10 4v12l-19 2-6-4z" fill="#8c6646" stroke="#483a2d"/>' +
-      '<path d="M66 18l6 3 17-2m-17 2v10" fill="none" stroke="#c09a6c"/>';
-    return svg(94, 36, layers);
-  }
-
   var SPRITES = {
     /* места, 120x88 */
     'place:bin': function () { return svg(120, 88,
@@ -172,44 +159,11 @@
     'placeStage:den-2': function () { return denSprite(2); },
     'placeStage:den-3': function () { return denSprite(3); },
     'placeStage:den-4': function () { return denSprite(4); },
-    'denInterior:1': function () { return denInterior(1); },
-    'denInterior:2': function () { return denInterior(2); },
-    'denInterior:3': function () { return denInterior(3); },
-    'denInterior:4': function () { return denInterior(4); },
     /* предметы, 64x64 */
-    'item:bottle': function () { return svg(64, 64,
-      sh(32, 53, 22, 5) +
-      '<g transform="rotate(-38 32 34)"><rect x="22" y="22" width="20" height="34" rx="6" fill="#3f7a55"' + O + '/>' +
-      '<rect x="28" y="7" width="8" height="17" rx="2" fill="#3f7a55"' + O + '/>' +
-      '<rect x="27" y="4" width="10" height="5" rx="1" fill="#c9b458"' + O + '/>' +
-      '<rect x="22" y="32" width="20" height="12" fill="#d8d2bd"' + O + '/>' +
-      '<path d="M26 26v5M26 46v6" stroke="#8fd0aa" stroke-width="2" opacity=".8"/></g>'); },
-    'item:can': function () { return svg(64, 64,
-      sh(32, 55, 18, 5) +
-      '<rect x="18" y="22" width="28" height="32" rx="3" fill="#9aa3a8"' + O + '/>' +
-      '<rect x="18" y="30" width="28" height="15" fill="#9c4034"' + O + '/>' +
-      '<path d="M24 35h16M24 40h10" stroke="#e6d9b8" stroke-width="2"/>' +
-      '<ellipse cx="32" cy="22" rx="14" ry="5" fill="#5d666c"' + O + '/>' +
-      '<path d="M19 19q4-14 16-12q9 2 10 9q-12-6-26 3z" fill="#c3cacd"' + O + '/>' +
-      '<path d="M22 50v-3M42 26v3" stroke="#6b757c" stroke-width="2"/>'); },
-    'item:scraps': function () { return svg(64, 64,
-      sh(32, 52, 24, 6) +
-      '<path d="M6 40l32-15 20 13-32 16z" fill="#b9b6a8"' + O + '/>' +
-      '<path d="M16 40l22-10M22 44l22-10M30 47l14-6" stroke="#8d8a7e" stroke-width="1.5"/>' +
-      '<path d="M16 34q6-13 20-8q8 4 3 11q-5 7-15 5q-9-2-8-8z" fill="#b98a4a"' + O + '/>' +
-      '<path d="M22 33q5-6 12-3" fill="none" stroke="#e0c08a" stroke-width="2"/>' +
-      '<circle cx="19" cy="38" r="4.5" fill="#b9b6a8"/>' +
-      '<path d="M40 42l11 5" stroke="#12161a" stroke-width="7" stroke-linecap="round"/>' +
-      '<path d="M40 42l11 5" stroke="#e9e3d2" stroke-width="4" stroke-linecap="round"/>' +
-      '<circle cx="52" cy="47.5" r="3" fill="#e9e3d2" stroke="#12161a" stroke-width="1.5"/>'); },
-    'item:cardboard': function () { return svg(64, 64,
-      sh(32, 55, 26, 5) +
-      '<path d="M6 38l26-13 26 13-26 13z" fill="#a8845a"' + O + '/>' +
-      '<path d="M6 38v7l26 13v-7z" fill="#8a6a45"' + O + '/>' +
-      '<path d="M58 38v7L32 58v-7z" fill="#77593a"' + O + '/>' +
-      '<path d="M29 26.5l6 3-26 13-6-3z" fill="#cdbf94" opacity=".85"/>' +
-      '<path d="M40 33l8 4M38 40l5 2.5" stroke="#77593a" stroke-width="2"/>' +
-      '<path d="M12 42l5 2.5M14 47l8 4" stroke="#6b5136" stroke-width="1.5"/>'); },
+    'item:bottle': function () { return 'url("loot-bottle.png")'; },
+    'item:can': function () { return 'url("loot-can.png")'; },
+    'item:scraps': function () { return 'url("loot-scraps.png")'; },
+    'item:cardboard': function () { return 'url("loot-cardboard.png")'; },
     'item:boards': function () { return svg(64, 64,
       sh(32, 52, 27, 5) +
       '<g transform="rotate(-27 32 32)">' +
@@ -255,14 +209,7 @@
       '<path d="M38 26l15-13" stroke="#12161a" stroke-width="5" stroke-linecap="round"/>' +
       '<path d="M38 26l15-13" stroke="#dcc88c" stroke-width="2.5" stroke-linecap="round"/>' +
       '<circle cx="54" cy="12" r="3.6" fill="#8a3326"' + O + '/>'); },
-    'item:fire': function () { return svg(64, 64,
-      '<ellipse cx="32" cy="54" rx="24" ry="7" fill="#17110c" opacity=".7"/>' +
-      '<path d="M11 52l30-9M53 52l-30-9" stroke="#12161a" stroke-width="9" stroke-linecap="round"/>' +
-      '<path d="M11 52l30-9M53 52l-30-9" stroke="#4a3522" stroke-width="5.5" stroke-linecap="round"/>' +
-      '<path d="M32 6q15 17 11 32q-2 11-11 11q-11 0-12-12q-1-9 6-15q0 7 4 7q-3-11 2-23z" fill="#f08a2a"' + O + '/>' +
-      '<path d="M32 24q8 10 6 18q-1 6-6 6q-6 0-6-7q0-5 6-17z" fill="#ffd96a"/>' +
-      '<circle cx="18" cy="24" r="1.6" fill="#ffb35a"/><circle cx="47" cy="17" r="1.3" fill="#ffb35a"/>'); },
-
+    'item:fire': function () { return 'url("fire-embers.png")'; },
 
     /* палатка с одеждой: днём — прилавок и вешалка, ночью — под брезентом */
     'place:stall': function () { return svg(120, 88,
@@ -332,92 +279,18 @@
       '<path d="M24 41h16M26 47h12" stroke="#5f7486" stroke-width="2.6" stroke-linecap="round"/>'); },
 
     /* одежда, 64x64 */
-    'item:hat': function () { return svg(64, 64,
-      sh(32, 56, 22, 4) +
-      '<circle cx="32" cy="12" r="6" fill="#cfd8de"' + O + '/>' +
-      '<path d="M12 44q0-28 20-28t20 28z" fill="#4f6b7d"' + O + '/>' +
-      '<path d="M22 22l-4 20M32 17v25M42 22l4 20" stroke="#3d5463" stroke-width="2" fill="none"/>' +
-      '<rect x="9" y="42" width="46" height="12" rx="4" fill="#7d93a3"' + O + '/>' +
-      '<path d="M18 43v10M27 43v10M37 43v10M46 43v10" stroke="#5f7486" stroke-width="2"/>'); },
-    'item:ushanka': function () { return svg(64, 64,
-      sh(32, 58, 22, 4) +
-      '<path d="M18 53l-3 8M46 53l3 8" stroke="#12161a" stroke-width="2" stroke-linecap="round"/>' +
-      '<path d="M13 37q0-22 19-22t19 22z" fill="#4d4338"' + O + '/>' +
-      '<path d="M9 33h13l2 20q-8 4-13-2z" fill="#74685a"' + O + '/>' +
-      '<path d="M55 33H42l-2 20q8 4 13-2z" fill="#74685a"' + O + '/>' +
-      '<path d="M19 21h26l4 13H15z" fill="#857868"' + O + '/>' +
-      '<path d="M32 23.5l1.3 2.7 3 .4-2.2 2 .6 3-2.7-1.5-2.7 1.5.6-3-2.2-2 3-.4z" fill="#a8342a" stroke="#12161a" stroke-width="1.2" stroke-linejoin="round"/>'); },
-    'item:scarf': function () { return svg(64, 64,
-      sh(32, 58, 20, 4) +
-      '<path d="M36 26h13l3 28H39z" fill="#5f7486"' + O + '/>' +
-      '<path d="M40 54v5M44 54v5M48 54v5M52 54v5" stroke="#12161a" stroke-width="2" stroke-linecap="round"/>' +
-      '<path d="M37.5 37h13M38.5 45h13" stroke="#a8342a" stroke-width="3"/>' +
-      '<path d="M11 24q21-18 42 0q2 6-3 10q-18-12-36 0q-5-4-3-10z" fill="#6f879a"' + O + '/>' +
-      '<path d="M21 19l2 9M32 15v10M43 19l-2 9" stroke="#4a5f70" stroke-width="2"/>'); },
-    'item:jacket': function () { return svg(64, 64,
-      sh(32, 59, 22, 4) +
-      '<path d="M22 10l-14 8 4 27 8-2v15h24V43l8 2 4-27-14-8q-10 6-20 0z" fill="#3a4654"' + O + '/>' +
-      '<path d="M26 11l6 13 6-13z" fill="#e9e3d2" stroke="#12161a" stroke-width="1.5"/>' +
-      '<path d="M22 10l10 22M42 10L32 32v26" fill="none" stroke="#12161a" stroke-width="2"/>' +
-      '<circle cx="35" cy="40" r="1.6" fill="#b8ccd6"/><circle cx="35" cy="48" r="1.6" fill="#b8ccd6"/>' +
-      '<path d="M22 46h7M36 46h6" stroke="#2a333e" stroke-width="2"/>' +
-      '<ellipse cx="13.5" cy="34" rx="3" ry="4.5" fill="#6d5438" stroke="#12161a" stroke-width="1.2"/>'); },
-    'item:vatnik': function () { return svg(64, 64,
-      sh(32, 59, 23, 4) +
-      '<path d="M21 10l-14 9 4 27 8-2v14h26V44l8 2 4-27-14-9q-11 5-22 0z" fill="#5d6b4f"' + O + '/>' +
-      '<path d="M32 13v45" stroke="#12161a" stroke-width="2"/>' +
-      '<path d="M24 14v43M38.5 14v43M19 24h26M19 34h26M19 44h26" stroke="#46523b" stroke-width="1.6" fill="none"/>' +
-      '<path d="M22 10q10 7 20 0l-3 7q-7 4-14 0z" fill="#46523b"' + O + '/>' +
-      '<circle cx="34.6" cy="29" r="1.5" fill="#12161a"/><circle cx="34.6" cy="39" r="1.5" fill="#12161a"/><circle cx="34.6" cy="49" r="1.5" fill="#12161a"/>'); },
-    'item:coatGood': function () { return svg(64, 64,
-      sh(32, 61, 22, 3) +
-      '<path d="M22 6L9 14l3 26 8-2v23h24V38l8 2 3-26-13-8q-10 6-20 0z" fill="#4a5560"' + O + '/>' +
-      '<path d="M22 6l10 20 10-20q-10 6-20 0z" fill="#2f3840"' + O + '/>' +
-      '<path d="M32 26v35" stroke="#12161a" stroke-width="2"/>' +
-      '<path d="M20 40h24v5H20z" fill="#2f3840"' + O + '/><rect x="29.5" y="39.5" width="5" height="6" fill="#b8ccd6" stroke="#12161a" stroke-width="1.2"/>' +
-      '<circle cx="27" cy="32" r="1.5" fill="#b8ccd6"/><circle cx="37" cy="32" r="1.5" fill="#b8ccd6"/><circle cx="27" cy="52" r="1.5" fill="#b8ccd6"/><circle cx="37" cy="52" r="1.5" fill="#b8ccd6"/>'); },
-    'item:raincoat': function () { return svg(64, 64,
-      sh(32, 59, 24, 4) +
-      '<path d="M32 5q-11 0-13 13L7 52q25 10 50 0L45 18Q43 5 32 5z" fill="#8fb3cc"' + O + '/>' +
-      '<ellipse cx="32" cy="16" rx="8" ry="7" fill="#27313a"' + O + '/>' +
-      '<path d="M32 23v32" stroke="#5f7f97" stroke-width="2"/>' +
-      '<path d="M18 30l-4 16M46 30l3 14M25 36l-1 12" stroke="#d6e6f0" stroke-width="2" stroke-linecap="round" opacity=".8"/>' +
-      '<circle cx="34.5" cy="32" r="1.4" fill="#12161a"/><circle cx="34.5" cy="41" r="1.4" fill="#12161a"/>'); },
-    'item:trackpants': function () { return svg(64, 64,
-      sh(32, 60, 20, 3) +
-      '<path d="M18 7h28l5 52H36l-4-32-4 32H13z" fill="#2f3a45"' + O + '/>' +
-      '<path d="M18 7h28l.6 6H17.4z" fill="#1f272f"' + O + '/>' +
-      '<path d="M18.5 15l-3.6 43M20.8 15l-3.6 43M23.1 15l-3.6 43M45.5 15l3.6 43M43.2 15l3.6 43M40.9 15l3.6 43" stroke="#e9e3d2" stroke-width="1.3"/>' +
-      '<path d="M30 9.5l2 5 2-5" fill="none" stroke="#e9e3d2" stroke-width="1.3"/>'); },
-    'item:jeans': function () { return svg(64, 64,
-      sh(32, 60, 20, 3) +
-      '<path d="M18 7h28l5 52H36l-4-32-4 32H13z" fill="#4f6b86"' + O + '/>' +
-      '<path d="M18 7h28l.6 6H17.4z" fill="#3d5670"' + O + '/>' +
-      '<path d="M20 14q2 8 9 8M44 14q-2 8-9 8M32 13v14" fill="none" stroke="#9db6cb" stroke-width="1.3" stroke-dasharray="2.5 2"/>' +
-      '<ellipse cx="21" cy="40" rx="4" ry="2.6" fill="#9db6cb" stroke="#12161a" stroke-width="1.2"/>' +
-      '<path d="M40 38l5 1M41 42l4 .5" stroke="#9db6cb" stroke-width="1.5"/>' +
-      '<rect x="30" y="8" width="4" height="4" fill="#b8ccd6" stroke="#12161a" stroke-width="1"/>'); },
-    'item:gloves': function () { return svg(64, 64,
-      sh(32, 58, 24, 4) +
-      '<path d="M8 28q0-14 9-14t9 12l3-3q5-1 4 6l-4 13v6H8z" fill="#7d93a3"' + O + '/>' +
-      '<rect x="6" y="46" width="22" height="10" rx="3" fill="#4f6b7d"' + O + '/>' +
-      '<path d="M56 28q0-14-9-14t-9 12l-3-3q-5-1-4 6l4 13v6h21z" fill="#7d93a3"' + O + '/>' +
-      '<rect x="36" y="46" width="22" height="10" rx="3" fill="#4f6b7d"' + O + '/>' +
-      '<path d="M12 49v5M17 49v5M22 49v5M42 49v5M47 49v5M52 49v5" stroke="#3d5463" stroke-width="1.6"/>' +
-      '<path d="M13 24h9M42 24h9" stroke="#a8342a" stroke-width="2.5"/>'); },
-    'item:workGloves': function () { return svg(64, 64,
-      sh(32, 59, 20, 4) +
-      '<path d="M16 58V32q0-3 3-3V15q0-3.5 3.5-3.5T26 15v-4q0-3.5 3.5-3.5T33 11v3q0-3.5 3.5-3.5T40 14v5q0-3 3.3-3t3.2 3v14l4-6q3-3 5.5 0q1 2-.5 4.5L47 46v12z" fill="#a8935a"' + O + '/>' +
-      '<path d="M16 49h31v9H16z" fill="#8a7846"' + O + '/>' +
-      '<path d="M26 16v12M33 15v13M40 19v10" stroke="#7d6c3e" stroke-width="1.6" stroke-linecap="round"/>' +
-      '<path d="M20 53h23" stroke="#6b5c34" stroke-width="1.6"/>'); },
-    'item:sneakers': function () { return svg(64, 64,
-      sh(32, 57, 27, 4) +
-      '<path d="M7 46q-1-12 6-15q3-1 5 1l9 7q8 5 21 6q9 1 9 8H7z" fill="#cfd8de"' + O + '/>' +
-      '<path d="M5 51h52q1 5-3 5H8q-4 0-3-5z" fill="#e9e3d2"' + O + '/>' +
-      '<path d="M20 34l4 4M24 31l5 5M29 33l4 4" stroke="#12161a" stroke-width="1.8" stroke-linecap="round"/>' +
-      '<path d="M12 44q14 4 30 2" fill="none" stroke="#a8342a" stroke-width="3" stroke-linecap="round"/>' +
-      '<path d="M8 38q3-3 7-2" fill="none" stroke="#7d8890" stroke-width="2"/>'); },
+    'item:hat': function () { return 'url("clothes/hat.png")'; },
+    'item:ushanka': function () { return 'url("clothes/ushanka.png")'; },
+    'item:scarf': function () { return 'url("clothes/scarf.png")'; },
+    'item:jacket': function () { return 'url("clothes/jacket.png")'; },
+    'item:vatnik': function () { return 'url("clothes/vatnik.png")'; },
+    'item:coatGood': function () { return 'url("clothes/coatGood.png")'; },
+    'item:raincoat': function () { return 'url("clothes/raincoat.png")'; },
+    'item:trackpants': function () { return 'url("clothes/trackpants.png")'; },
+    'item:jeans': function () { return 'url("clothes/jeans.png")'; },
+    'item:gloves': function () { return 'url("clothes/gloves.png")'; },
+    'item:workGloves': function () { return 'url("clothes/workGloves.png")'; },
+    'item:sneakers': function () { return 'url("clothes/sneakers.png")'; },
 
     /* значки характеристик, 24x24 (на тёмной плашке .chip) */
     'stat:warmth': function () { return svg(24, 24,
@@ -564,11 +437,7 @@
       '<circle cx="33" cy="19.4" r="2.3" fill="#c9624e" stroke="#12161a" stroke-width="1.2"/>' +
       '<path d="M27.5 22.4q3 2.2 6.5 0" fill="none" stroke="#6e4f3c" stroke-width="1.4" stroke-linecap="round"/>'); },
     /* правка 016: пакет с мусором в руке жильца (рисуется отдельно поверх фигурки, пока несёт) */
-    'npcbag:trash': function () { return svg(24, 26,
-      '<path d="M6 9q6-3 12 0l3 13q-9 4.5-18 0z" fill="#262b31"' + O + '/>' +
-      '<path d="M9 9q3-7 6 0" fill="none"' + O + '/>' +
-      '<path d="M8 14q3-1.5 5.5 1M14 19q2 0 4-1.5" stroke="#5d6874" stroke-width="1.4" fill="none" stroke-linecap="round"/>' +
-      '<path d="M17 8l2-2" stroke="#7c8a96" stroke-width="1.3" stroke-linecap="round"/>'); },
+    'npcbag:trash': function () { return 'url("walker-trash-bag.png")'; },
     'npc:granny': function () { return svg(64, 64,
       sh(32, 59, 18, 4) +
       '<path d="M22 52v7h8v-7M34 52v7h8v-7" fill="#3a3632"' + O + '/>' +
@@ -682,7 +551,6 @@
 
   /* Куда какой вид спрайта попадает: первый селектор — плитка на поле, остальные — мелкие копии. */
   var SPRITE_TARGETS = {
-    denInterior: function (stage) { return [null, '.painted-courtyard #place-den.stage-' + stage + '::before']; },
     place: function (t) { return ['.place-' + t + ' .place-emoji']; },
     placeOpen: function (t) { return ['#place-' + t + '.door-open .place-emoji']; },
     placeClosed: function (t) { return ['#place-' + t + '.closed .place-emoji']; },
@@ -804,6 +672,7 @@
       gait.phase = (gait.phase + distance / (bodyH * 1.05)) % 1;
       gait.movedAt = now;
     }
+    if (!hero && el.classList.contains('at-counter')) gait.facing = 'back';
     gait.x = x; gait.y = y;
     var frame = walking && now - gait.movedAt < 120 ? 1 + Math.floor(gait.phase * 4) : 0;
     if (el.dataset.gaitPaused === 'true') frame = Number(el.dataset.gaitFrame || 0);
@@ -829,18 +698,10 @@
   var postMask = null, postLayer = null, tiles = null;
   var closedShopArt = null;
   var openDoorArt = null, doorWasOpen = null;
-  var binPatch = { x: 1528, y: 46, image: null };
   var benchPatch = { x: 920, y: 110, image: null,
     outline: 'M61 110L61 105Q62 102 66 101Q71 99 78 102Q87 100 96 101Q106 98 113 101Q130 100 141 101Q154 98 160 100Q166 100 171 99Q176 99 177 104L177 110Z M61 112H177V116.6H61Z M69 109H73V121H69Z M163 109H166V121H163Z M62 122Q69 119 75 120L165 120Q174 118 176 122L180 126Q182 129 180 130H60L59.5 127Z M68 129H72V147.5H68Z M72 129H74V142H72Z M162 129H166V141H162Z M171 129H175V148H171Z' };
   // Левый верхний угол фрагмента в координатах иллюстрации 1808×870.
   var doorPatch = { x: 795, y: 126 };
-
-  function paintBin() {
-    if (!courtyard || !binPatch.image) return;
-    var sx = W / courtyard.width, sy = H / courtyard.height;
-    bc.drawImage(binPatch.image, binPatch.x * sx, binPatch.y * sy,
-      binPatch.image.width * sx, binPatch.image.height * sy);
-  }
 
   function paintBench() {
     if (!courtyard || !benchPatch.image) return;
@@ -890,7 +751,9 @@
       'M23 48 H31 V148 L33 153 L23 155 L21 152 L23 145 Z M34 49 H40 V141 L35 144 L34 139 Z M197 48 H207 V154 L198 156 L196 153 Z M190 49 H196 V143 H191 Z ' +
       'M89 49 H95 V116 H89 Z M144 49 H149 V116 H144 Z M39 105 H192 V110 H39 Z M30 126 H199 V132 H30 Z ' +
       'M45 121 Q45 117 51 116 H182 Q190 116 189 123 L186 126 H46 Z M51 125 H56 V147 H51 Z M89 125 H94 V146 H89 Z M144 125 H149 V145 H144 Z M176 125 H182 V148 H176 Z' };
-  var foregroundOccluders = [tableFront, kioskFront, recycleFront, stopFront];
+  var binFront = { id: 'bin-front', block: 'bin', x: 1380, y: 322, w: 144, h: 88,
+    outline: 'M5 32L11 10Q15 1 36 4L106 4Q134 0 137 13L140 30L143 39L137 47L135 72L128 76Q128 85 122 85L116 82L115 76L34 76Q34 85 27 85L21 76L10 74L7 46L3 43Z' };
+  var foregroundOccluders = [tableFront, kioskFront, recycleFront, stopFront, binFront];
   var foreground = [benchFront].concat(foregroundOccluders);
 
   function paintFurniture(cutout) {
@@ -955,7 +818,7 @@
     });
   }
   var NIGHT = 0.72;                // плотность темноты ночью
-  var dark = 0;
+  var dark = 0, lastBandDark = '';
   var windows = [], winTimer = 0, houseH = 0, houseW = 0, roadY = 0;
   // Координаты стекла и пятки каждого столба на иллюстрации, в долях игрового поля.
   var streetLamps = [
@@ -1079,9 +942,7 @@
     c.fillRect(w.x - 3, w.y + w.h + 2, w.w + 6, 3);
   }
 
-  /* Правка 022: теплотрасса по земле — бетонный короб из плит от котельной (за левым краем двора) к дому.
-     Над коробом снег тает, вокруг — мокрый асфальт; из щелей между плитами зимой идёт пар (heatVents → frame).
-     Места «Теплотрасса» и «Лежбище» (data.js) стоят на коробе, их спрайты рисуют вскрытую плиту и лаз. */
+  // Пар выходит из открытой секции двух труб и ближайшего шва бетонных плит.
   var heatVents = [];
   // Полоса бесшовного шума движется вверх внутри расширяющейся струи.
   // Кадры рисуем один раз; в цикле двора остаётся по одному drawImage на щель.
@@ -1139,56 +1000,28 @@
       fc.restore();
     });
   }
-  function drawHeatMain(c, r) {
-    var P = (window.GAME_DATA && window.GAME_DATA.places) || {}, px = P.pipe ? P.pipe.x : 0.09;
-    var bw = W < 1200 ? 36 : 44, cx = W * px, x0 = cx - bw / 2, y0 = houseH - 4, yb = H * 0.8, th = 30, i, y, x;
-    heatVents = [];
-    /* мокрая полоса: снег стаял */
-    c.fillStyle = 'rgba(14,19,25,.55)';
-    c.beginPath(); c.roundRect ? c.roundRect(x0 - 16, y0, bw + 32, yb - y0 + th / 2 + 16, 14) : c.rect(x0 - 16, y0, bw + 32, yb - y0 + th / 2 + 16); c.fill();
-    c.beginPath(); c.rect(-4, yb - th / 2 - 14, cx + 4, th + 28); c.fill();
-    c.strokeStyle = 'rgba(150,175,195,.12)'; c.lineWidth = 1.5;
-    c.beginPath(); c.moveTo(x0 - 10, y0 + 20); c.lineTo(x0 - 10, yb - th); c.stroke();
-    /* подтаявший снег по краям — рыхлые кромки */
-    for (y = y0 + 30; y < yb - 20; y += 26 + r() * 30) {
-      blob(c, r, x0 - 22 - r() * 6, y, 9 + r() * 7, 14 + r() * 10, 'rgba(196,206,214,.55)', 8);
-      blob(c, r, x0 + bw + 22 + r() * 6, y + 12, 9 + r() * 7, 14 + r() * 10, 'rgba(196,206,214,.5)', 8);
-    }
-    function slabsV(xa, ya, yz) {               // вертикальный пролёт: верх плит, правая грань в тени, швы
-      c.fillStyle = 'rgba(0,0,0,.35)'; c.fillRect(xa + 5, ya + 6, bw, yz - ya);
-      c.fillStyle = '#7f8a91'; c.fillRect(xa, ya, bw, yz - ya);
-      c.fillStyle = '#5c666d'; c.fillRect(xa + bw - 5, ya, 5, yz - ya);
-      c.strokeStyle = '#12161a'; c.lineWidth = 2; c.strokeRect(xa, ya, bw, yz - ya);
-      for (y = ya + 40 + r() * 8; y < yz - 8; y += 40 + r() * 10) {
-        c.fillStyle = '#3c454c'; c.fillRect(xa + 1, y - 1.5, bw - 2, 3);
-        c.fillStyle = 'rgba(188,197,202,.5)'; c.fillRect(xa + 2, y + 2, bw - 8, 1.5);
-        heatVents.push({ x: xa + bw / 2, y: y, w: bw });
-      }
-      for (i = 0; i < (yz - ya) / 30; i++) {     // потёки и пятна
-        c.fillStyle = 'rgba(20,26,30,' + (0.08 + r() * 0.1) + ')';
-        c.beginPath(); c.ellipse(xa + 6 + r() * (bw - 14), ya + r() * (yz - ya), 3 + r() * 6, 2 + r() * 4, 0, 0, 6.28); c.fill();
-      }
-    }
-    slabsV(x0, y0, yb);
-    /* нижний пролёт: к котельной за левым краем; видна передняя грань */
-    var ya = yb - th / 2;
-    c.fillStyle = 'rgba(0,0,0,.35)'; c.fillRect(-4, ya + th + 2, x0 + bw + 2, 8);
-    c.fillStyle = '#7f8a91'; c.fillRect(-4, ya, x0 + bw + 4, th);
-    c.fillStyle = '#5c666d'; c.fillRect(-4, ya + th, x0 + bw + 4, 10);
-    c.strokeStyle = '#12161a'; c.lineWidth = 2; c.strokeRect(-4, ya, x0 + bw + 4, th + 10);
-    c.beginPath(); c.moveTo(-4, ya + th); c.lineTo(x0 + bw, ya + th); c.stroke();
-    for (x = x0 - 36; x > 0; x -= 40 + r() * 8) {
-      c.fillStyle = '#3c454c'; c.fillRect(x - 1.5, ya + 1, 3, th + 8);
-      heatVents.push({ x: x, y: ya + th / 2, w: 20 });
-    }
-    c.fillStyle = 'rgba(188,197,202,.45)'; c.fillRect(0, ya + 3, x0 + bw - 6, 2);
+  var facadeArt = new Image(), roomLight = {};
+  function prepareFacade() {
+    // Свет проходит сквозь тюль и стекло, тёмная мебель и цветы остаются силуэтами.
+    var tints = { amber: '#ffac61', honey: '#ffd49b', tv: '#87b9ff' };
+    Object.keys(tints).forEach(function (kind) {
+      var c = document.createElement('canvas');
+      c.width = facadeArt.width; c.height = facadeArt.height;
+      var ctx = c.getContext('2d');
+      ctx.filter = 'grayscale(1) brightness(2.6)';
+      ctx.drawImage(facadeArt, 0, 0);
+      ctx.filter = 'none'; ctx.globalCompositeOperation = 'multiply';
+      ctx.fillStyle = tints[kind]; ctx.fillRect(0, 0, c.width, c.height);
+      roomLight[kind] = c;
+    });
+    if (courtyard && W && H) drawBg();
   }
 
   function drawBg() {
     if (courtyard) {
       // Изображение и точки взаимодействия растягиваются в одних и тех же долях игрового поля.
       bc.drawImage(courtyard, 0, 0, W, H);
-      paintBin();
+      if (roomLight.amber) bc.drawImage(facadeArt, 0, 0, W, H * facadeArt.height / courtyard.height);
       paintBench();
       refreshPostLayer();
       foreground.forEach(paintFurniture);
@@ -1201,10 +1034,9 @@
         [1032, 23, 1052, 1062, 1084, 79], [1145, 23, 1165, 1175, 1200, 80]];
       windows = glazed.map(function (g, index) {
         return { x: g[0] * W / 1808, y: g[1] * H / 870, w: (g[4] - g[0]) * W / 1808, h: (g[5] - g[1]) * H / 870,
-          pane1: (g[2] - g[0]) * W / 1808, pane2: (g[3] - g[0]) * W / 1808, lit: index % 3 !== 0, tone: index % 2 === 0 };
+          source: g, pane1: (g[2] - g[0]) * W / 1808, pane2: (g[3] - g[0]) * W / 1808, lit: index % 3 !== 0, tone: index % 2 === 0 };
       });
-      heatVents = [[0.0747, 0.4161, 0.03], [0.0741, 0.6828, 0.025],
-        [0.0642, 0.2943, 0.021], [0.1056, 0.2322, 0.005], [0.1554, 0.2322, 0.005]].map(function (point) {
+      heatVents = [[.861, .198, .014], [.851, .202, .008]].map(function (point) {
         return { x: point[0] * W, y: point[1] * H, w: point[2] * W };
       });
       return;
@@ -1268,7 +1100,6 @@
       snowPatch(c, r, x, houseH + 16, 50 + r() * 34, 9 + r() * 5);
     }
     snowPatch(c, r, W * 0.9, houseH * 0.55, W * 0.1, houseH * 0.5);
-    drawHeatMain(c, r);
     /* следы по снегу и к подъезду */
     function steps(x0, y0, x1, y1, n) {
       var dx = x1 - x0, dy = y1 - y0, len = Math.sqrt(dx * dx + dy * dy), ang = Math.atan2(dy, dx);
@@ -1459,14 +1290,78 @@
     }
   }
   function setWindowsFor(night, all) {
+    if (courtyard) return;
     var target = night ? 0.6 : 0.14;
     var list = all ? windows : [windows[Math.floor(Math.random() * windows.length)]];
     for (var i = 0; i < list.length; i++) {
       var w = list[i];
       if (!w || w.fixed) continue;
       var lit = Math.random() < target;
-      if (lit !== w.lit || all) { w.lit = lit; if (!courtyard) drawWindow(w); }
+      if (lit !== w.lit || all) { w.lit = lit; drawWindow(w); }
     }
+  }
+
+  // Сутки фасада начинаются в шесть утра: полуночный телевизор продолжает тот же вечер.
+  var smokerArt = new Image(), facadeDay = -1, householdOrder = [], smokeBreaks = [];
+  smokerArt.src = 'window-smoker.png';
+  function updateApartments(stamp) {
+    var day = Math.floor((stamp - 360) / 1440), minute = stamp - day * 1440;
+    if (day !== facadeDay) {
+      facadeDay = day;
+      var roll = rngFrom(8371 + day * 137);
+      householdOrder = windows.map(function (_, i) { return i; });
+      for (var i = householdOrder.length - 1; i > 0; i--) {
+        var j = Math.floor(roll() * (i + 1)), swap = householdOrder[i];
+        householdOrder[i] = householdOrder[j]; householdOrder[j] = swap;
+      }
+      smokeBreaks = [540 + Math.floor(roll()*240), 1020 + Math.floor(roll()*240)];
+    }
+    householdOrder.forEach(function (id, rank) {
+      var w = windows[id];
+      var daytime = rank === 0 && minute >= 500 && minute < 930;
+      var evening = minute >= 900 + rank * 38 && minute < 1300 + ((rank * 43 + day * 13) % 195);
+      w.tv = rank === 2 && minute >= 1450 && minute < 1770;
+      w.lit = daytime || evening || w.tv;
+      w.smoke = -1;
+      var start = rank === 0 ? smokeBreaks[0] : rank === 3 ? smokeBreaks[1] : -100;
+      if (minute >= start && minute < start + 44) w.smoke = (minute - start) / 44;
+    });
+  }
+
+  function drawResident(w, wind, minute) {
+    var progress = w.smoke;
+    var opening = Math.min(1, progress * 12, (1-progress)*12);
+    var x = w.x + w.pane2, width = w.w - w.pane2, height = w.h * .74;
+    var y = w.y + w.h - height;
+    fc.save();
+    fc.translate(x, y); fc.scale(width, height);
+    fc.fillStyle = 'rgba(21,22,25,' + .85 * opening + ')';
+    fc.fillRect(0, 0, 1, 1);
+    fc.save(); fc.beginPath(); fc.rect(0, 0, 1, 1); fc.clip();
+    if (smokerArt.naturalWidth) {
+      fc.globalAlpha = opening;
+      var spriteWidth = height / width * smokerArt.naturalWidth / smokerArt.naturalHeight;
+      fc.filter = 'brightness(1.32)';
+      fc.drawImage(smokerArt, .20 + .35*(1-opening), .12, spriteWidth, 1);
+    }
+    fc.restore();
+    // Кромка поворачивающейся створки и тёмное стекло в перспективе.
+    var edge = 1 - .82 * opening;
+    fc.beginPath(); fc.moveTo(0,0); fc.lineTo(edge, .09*opening);
+    fc.lineTo(edge, 1-.08*opening); fc.lineTo(0,1); fc.closePath();
+    fc.fillStyle = 'rgba(118,133,145,.22)'; fc.fill();
+    fc.strokeStyle = '#746e65'; fc.lineWidth = .047; fc.stroke();
+    if (opening > .85) {
+      var puff = ((minute + progress * 15) % 13) / 13;
+      fc.fillStyle = 'rgba(247,145,75,' + (.42 + .46*(1-puff)) + ')';
+      fc.fillRect(.20,.49,.075,.035);
+      if (!steamFrames) steamFrames = makeSteamFrames();
+      fc.translate(.21, .50);
+      fc.transform(1, 0, .24 + wind*.18, 1, 0, 0);
+      fc.globalAlpha = .16 + .44*Math.sin(Math.PI*puff);
+      fc.drawImage(steamFrames[Math.floor(minute*5)%steamFrames.length], -.67, -1.05, 1.34, 1.05);
+    }
+    fc.restore();
   }
 
   function centerOf(el, fr) {
@@ -1531,6 +1426,7 @@
         var streetY = x >= stopFront.depthLeft && x <= stopFront.depthRight ? stopFront.frontY : post.footY;
         var depth = footY >= streetY ? 'street' : footY >= shop.frontY ? 'pavement' :
           footY >= tableFront.frontY ? 'yard' : footY >= 0.294 || child.classList.contains('sitting') ? 'path' : 'back';
+        if (x > .745 && x < .86 && footY >= binFront.frontY && depth === 'path') depth = 'yard';
         if (child.dataset.depth !== depth) child.dataset.depth = depth;
       }
     }
@@ -1541,9 +1437,17 @@
     var clear = weatherEl && weatherEl.dataset.type === 'calm';
     if (wind !== lastWind) { lastWind = wind; document.body.style.setProperty('--lean', FLAME_LEAN[wind]); }
     dark += ((night ? (clear ? CLEAR_NIGHT : NIGHT) : 0) - dark) * Math.min(1, dt * 0.5);
+    var bandDark = dark.toFixed(2);
+    if (bandDark !== lastBandDark) {
+      field.parentElement.style.setProperty('--facade-night', bandDark);
+      lastBandDark = bandDark;
+    }
     var k = Math.min(1, dark / NIGHT), i, p;
     var fr = field.getBoundingClientRect();
 
+    var clock = document.getElementById('clock');
+    var facadeMinute = Number(clock.dataset.minute || 1920);
+    if (courtyard) updateApartments(facadeMinute);
     winTimer -= dt;
     if (winTimer <= 0) { winTimer = 0.8 + Math.random() * 2.4; setWindowsFor(night, false); }
     if (kioskDim > 0) kioskDim -= dt; else if (Math.random() < dt * 0.35) kioskDim = 0.07 + Math.random() * 0.12;
@@ -1670,15 +1574,23 @@
     }
     /* тёплый свет поверх */
     fc.globalCompositeOperation = 'lighter';
-    if (courtyard && k > 0.01) {
+    if (courtyard) {
       windows.forEach(function (win) {
         if (!win.lit) return;
-        var tint = win.tone ? '255,167,85' : '255,204,137';
-        glow(win.x + win.w / 2, win.y + win.h / 2, win.w * 1.15, 0.21 * k, tint);
-        fc.fillStyle = 'rgba(' + tint + ',' + 0.68 * k + ')';
-        fc.fillRect(win.x, win.y, win.pane1, win.h * 0.31);
-        fc.fillRect(win.x, win.y + win.h * 0.38, win.pane1, win.h * 0.62);
-        fc.fillRect(win.x + win.pane2, win.y, win.w - win.pane2, win.h);
+        var tint = win.tv ? '102,164,235' : win.tone ? '255,167,85' : '255,204,137';
+        var power = win.tv ? .32 + .09*Math.sin(facadeMinute*1.9) + .06*Math.sin(facadeMinute*.81) : .26 + .52*k;
+        glow(win.x + win.w / 2, win.y + win.h / 2, win.w * 1.15, 0.25 * power, tint);
+        var surface = roomLight[win.tv ? 'tv' : win.tone ? 'amber' : 'honey'];
+        if (!surface) return;
+        var g = win.source;
+        fc.save();
+        fc.beginPath();
+        fc.rect(win.x, win.y, win.pane1, win.h * .31);
+        fc.rect(win.x, win.y + win.h * .38, win.pane1, win.h * .62);
+        fc.rect(win.x + win.pane2, win.y, win.w - win.pane2, win.h);
+        fc.clip(); fc.globalAlpha = power;
+        fc.drawImage(surface, g[0], g[1], g[4]-g[0], g[5]-g[1], win.x, win.y, win.w, win.h);
+        fc.restore();
       });
     }
     for (i = 0; i < lights.length; i++) {
@@ -1700,6 +1612,9 @@
     fc.globalCompositeOperation = 'source-over';
 
     /* пар: теплотрасса, люк, дыхание героя */
+    if (courtyard) windows.forEach(function (w) {
+      if (w.smoke >= 0) drawResident(w, wind, facadeMinute);
+    });
     drawVentSteam(wind, k);
     if (!courtyard && Math.random() < dt * 3) puffs.push({ x: W * 0.57 - 10 + Math.random() * 20, y: H * 0.71 - 4, vx: 8 + Math.random() * 6, vy: -12 - Math.random() * 8, t: 0, max: 2 + Math.random(), r0: 4, r1: 18, a: 0.12 });
     breathT -= dt;
@@ -1773,7 +1688,7 @@
     tiles = document.getElementById('layer-tiles');
     var blocks = window.GAME_DATA.navigation.blocks;
     foregroundOccluders.forEach(function (part) {
-      var id = part.shop ? part.shop.id : 'busStop';
+      var id = part.shop ? part.shop.id : part.block || 'busStop';
       var box = blocks.find(function (block) { return block.id === id; });
       part.frontY = box.bottom;
       if (part === stopFront) {
@@ -1812,14 +1727,9 @@
       if (W && H) drawBg();
       field.classList.add('painted-courtyard');
     };
-    plate.src = 'courtyard.webp?v=027';
-    var binImage = new Image();
-    binImage.onload = function () {
-      binPatch.image = binImage;
-      field.classList.add('lowered-bin');
-      if (W && H) paintBin();
-    };
-    binImage.src = 'courtyard-bin.png';
+    facadeArt.onload = prepareFacade;
+    facadeArt.src = 'facade-windows.webp?v=040-yard';
+    plate.src = 'courtyard.webp?v=040-pipe-seat';
     var benchImage = new Image();
     benchImage.onload = function () {
       benchPatch.image = benchImage;

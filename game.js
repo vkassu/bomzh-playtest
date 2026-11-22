@@ -806,6 +806,7 @@
       if (S.over || S.begging.dialog) return;
       var h = S.hero;
       if (h.asleep) { wake('wake'); return; }
+      if (h.at === 'pipe') { log('pipeNoSleep'); return; }
       if (h.energy >= D.hero.max) { log('notSleepy'); return; }
       cancelHeroTask();
       S.menuOpen = false;
@@ -837,16 +838,18 @@
     function projectGround(x, y) {
       y = Math.max(navTop, y);
       if (walkable(x, y)) return { x: x, y: y };
+      var nearest, best = Infinity;
       for (var i = 0; i < blocks.length; i++) {
         var b = blocks[i];
         if (x <= b.left || x >= b.right || y <= b.top || y >= b.bottom) continue;
         var options = [{ x: b.left, y: y }, { x: b.right, y: y }, { x: x, y: b.bottom }];
         if (b.top >= navTop) options.push({ x: x, y: b.top });
-        return options.reduce(function (best, p) {
-          return dist(x,y,p.x,p.y) < dist(x,y,best.x,best.y) ? p : best;
+        options.forEach(function (p) {
+          var d = dist(x,y,p.x,p.y);
+          if (d < best && walkable(p.x,p.y)) { best = d; nearest = p; }
         });
       }
-      return { x: x, y: y };
+      return nearest || { x: x, y: y };
     }
     // Время входа во внутренность прямоугольника. Прямая вдоль края и касание единственного угла допустимы.
     function firstContact(x, y, tx, ty) {
@@ -1036,7 +1039,30 @@
       if (id === 'ask' || id === 'goodbye') return true;
       return id === 'askAboutYard' ? !dialog.question : !dialog.used;
     }
-    function nextDialogueLine(id, play) {
+    function adjustOdds(chance, factor) {
+      return chance * factor / (1 - chance + chance * factor);
+    }
+    function cardChance(id, n, dialog) {
+      if (id === 'ask') return giveChance(n, dialog);
+      if (id === 'goodbye') return null;
+      var base = D.begging.socialBases[who(n)][id];
+      var practice = D.begging.practice.social[skillProgress('social').level - 1];
+      var chance = base + (1 - base) * D.begging.socialReach * practice;
+      return adjustOdds(chance, D.begging.moods[dialog.mood][id] * dialog.rapport);
+    }
+    function newDialogue(n, step) {
+      var moods = Object.keys(D.begging.moods), roll = rng() * moods.length;
+      var mood = moods[Math.floor(roll)], lines = D.encounterText.observations[who(n)][mood];
+      return { npcId: n.id, used: null, question: false, lastMove: null, socialGain: 0, unlocked: [],
+        mood: mood, observationIndex: Math.floor((roll % 1) * lines.length), rapport: 1, bonus: 0, feedback: '', step: step };
+    }
+    function nextDialogueLine(id, play, dialog) {
+      // Даже после вопроса о дворе просьба продолжает разговор о еде или состоявшейся помощи.
+      if (id === 'ask') {
+        var followups = D.encounterText.followupRequests;
+        if (dialog.used === 'explain') return followups.explain;
+        if (dialog.used === 'favor') return dialog.favorAgreed ? followups.favorAgreed : followups.favorDeclined;
+      }
       var variants = D.begging.cards[id].variants, count = { talk: 'talksTold', joke: 'jokesTold', ask: 'requestsMade' }[id];
       var variant = variants[S.begging[count] % variants.length];
       if (play) S.begging[count]++;
@@ -1044,6 +1070,10 @@
     }
     function farewellLine(dialog, kind) {
       var data = D.begging.cards.goodbye, last = dialog.lastMove;
+      if (last && last.ok === false) {
+        var farewell = D.encounterText.failedFarewells[kind];
+        return { id: 'miss-' + last.topic, line: D.encounterText.failedFarewellLines[last.topic] || farewell.line, reply: farewell.reply };
+      }
       if (last && last.card === 'askAboutYard') {
         var yard = data.yard[kind][last.index];
         if (yard) return { id: 'yard-' + kind + '-' + last.index, line: yard.line, reply: yard.reply };
@@ -1062,13 +1092,16 @@
         var card = D.begging.cards[id], skill = card.skill || 'begging';
         if (card.level > skills[skill].level) continue;
         var enabled = cardEnabled(id, dialog);
-        cards.push({ id: id, label: card.label, description: card.description, enabled: enabled,
-          line: id === 'goodbye' ? farewellLine(dialog, who(n)).line : card.variants && enabled ? nextDialogueLine(id, false).line : null });
+        cards.push({ id: id, label: card.label, description: card.description, enabled: enabled, chance: cardChance(id, n, dialog),
+          line: id === 'goodbye' ? farewellLine(dialog, who(n)).line : card.variants && enabled ? nextDialogueLine(id, false, dialog).line : D.encounterText.lines[id] || null });
       }
+      var help = giveChance(n, dialog), food = n.type === 'granny' ? help * D.npcs.granny.scrapsChance : 0;
       return { npcId: n.id, name: npcName(n), kind: who(n), skills: skills, socialGain: dialog.socialGain,
         xp: skills.begging.xp, level: skills.begging.level, nextLevelXp: skills.begging.nextLevelXp, nextCard: skills.begging.nextCard,
         feedback: dialog.feedback, exchange: dialog.exchange || null, joke: dialog.used === 'joke' ? dialog.exchange || null : null,
-        unlocked: dialog.unlocked.slice(), chance: clamp(giveChance(n) + dialog.bonus, 0, 1), cards: cards };
+        unlocked: dialog.unlocked.slice(), chance: help, foodChance: food, moneyChance: help - food,
+        mood: dialog.mood, observation: D.encounterText.observations[who(n)][dialog.mood][dialog.observationIndex],
+        lastOutcome: dialog.lastOutcome || null, cards: cards };
     }
     function formatYardHint(reply) {
       var places = D.places, kiosk = places.kiosk, recycle = places.recycle;
@@ -1114,39 +1147,40 @@
       var card = D.begging.cards[id], skill = card.skill || 'begging', progress = skillProgress(skill), n = findNpc(dialog.npcId);
       if (!n || card.level > progress.level || !cardEnabled(id, dialog)) return false;
       teleInc(S.tele.begCards, id);
-      ev('begCard', { id: n.id, who: who(n), card: id, skill: id === 'goodbye' ? undefined : skill, level: progress.level });
-      if (id === 'askAboutYard') {
-        var kind = who(n), hints = card.hints[kind], heard = S.begging.yardHintsHeard[kind] || 0;
-        var index = heard % hints.length;
-        S.begging.yardHintsHeard[kind] = heard + 1;
-        dialog.question = true;
-        dialog.feedback = formatYardHint(hints[index]);
-        dialog.lastMove = { card: id, index: index };
-        appendLogLine(npcName(n) + ' — ' + dialog.feedback);
-        ev('yardHint', { id: n.id, who: kind, index: index, text: dialog.feedback });
-        awardCardXp('social', dialog, progress);
-        return true;
-      }
+      var practiced = id === 'ask' ? 'begging' : 'social';
+      ev('begCard', { id: n.id, who: who(n), card: id, skill: id === 'goodbye' ? undefined : practiced, level: skillProgress(practiced).level });
       if (id !== 'ask' && id !== 'goodbye') {
-        dialog.used = id;
-        if (card.variants) {
-          var variant = nextDialogueLine(id, true);
-          dialog.exchange = { id: variant.id, line: variant.line, reply: variant.replies[who(n)] };
-          dialog.bonus = card.bonusByKind[who(n)];
-          dialog.feedback = dialog.exchange.reply;
-          ev(id, { id: n.id, who: who(n), variant: variant.id, line: variant.line, reply: dialog.exchange.reply });
+        var before = giveChance(n, dialog), probability = cardChance(id, n, dialog), ok = rng() < probability;
+        var kind = who(n), variant = card.variants ? nextDialogueLine(id, true, dialog) : null;
+        var topic = variant ? variant.id : id, line = variant ? variant.line : D.encounterText.lines[id];
+        var reply, last = { card: id, topic: topic, ok: ok };
+        if (id === 'askAboutYard') dialog.question = true;
+        else dialog.used = id;
+        if (!ok) reply = D.encounterText.failures[topic][kind];
+        else if (id === 'askAboutYard') {
+          var hints = card.hints[kind], heard = S.begging.yardHintsHeard[kind] || 0;
+          last.index = heard % hints.length;
+          S.begging.yardHintsHeard[kind] = heard + 1;
+          reply = formatYardHint(hints[last.index]);
+          ev('yardHint', { id: n.id, who: kind, index: last.index, text: reply });
         } else {
-          dialog.bonus = card.chance;
-          dialog.feedback = card.feedback;
+          reply = variant ? variant.replies[kind] : D.encounterText.successes[id][kind];
         }
-        dialog.lastMove = { card: id, topic: dialog.exchange ? dialog.exchange.id : id };
-        if (skill === 'social') awardCardXp(skill, dialog, progress);
+        if (id === 'favor') dialog.favorAgreed = ok;
+        dialog.rapport *= D.begging.rapportOdds[id][ok ? 'yes' : 'no'];
+        dialog.lastOutcome = { card: id, ok: ok, before: before, after: giveChance(n, dialog) };
+        dialog.feedback = reply;
+        dialog.exchange = { id: topic, line: line, reply: reply };
+        dialog.lastMove = last;
+        appendLogLine(D.hero.name + ' — ' + line + '  ' + npcName(n) + ' — ' + reply);
+        ev(id, { id: n.id, who: kind, variant: topic, line: line, reply: reply, chance: probability, ok: ok, rapport: dialog.rapport });
+        awardCardXp('social', dialog, skillProgress('social'));
         return true;
       }
       S.begging.dialog = null;
       var result = {}, text = card.feedback;
       if (id === 'ask') {
-        result = finishHeroTask(dialog, nextDialogueLine(id, true));
+        result = finishHeroTask(dialog, nextDialogueLine(id, true, dialog));
         text = result.outcome;
         awardCardXp('begging', dialog, progress);
       } else {
@@ -1186,7 +1220,10 @@
     /* Где герой встаёт, чтобы работать с целью */
     function standPoint(t, x, y) {
       var Wk = D.hero.walk;
-      if (t && t.kind === 'place') return clampPos(D.places[t.id].x + L.heroStand.x, D.places[t.id].y + L.heroStand.y);
+      if (t && t.kind === 'place') {
+        var place = D.places[t.id], stand = place.heroStand || L.heroStand;
+        return clampPos(place.x + stand.x, place.y + stand.y);
+      }
       if (t && t.kind === 'npc') { var n = findNpc(t.id); if (n) return clampPos(n.x, n.y); }
       if (t && t.kind === 'item') {
         var it = findItem(t.id);
@@ -1372,6 +1409,11 @@
       var t = nearby();
       if (!t) return false;
       ev('act', { to: tgt(t), by: inCtx.by, paused: inCtx.paused ? 1 : 0 });
+      if (t.kind === 'place' && D.places[t.id].heroStand) {
+        order(t);
+        S.moveHold = true;
+        return true;
+      }
       S.moveHold = true;                                  // зажатая клавиша движения не срывает начатое дело
       if (t.kind === 'place') { heroLeavePlace(); enterPlace(t.id, false); }
       else if (t.kind === 'npc') { heroLeavePlace(); startTalk(findNpc(t.id)); }
@@ -1429,15 +1471,15 @@
         n = findNpc(t.npcId);
         if (!n) return;
         c = D.npcs[n.type];
-        var chance = clamp(giveChance(n) + dialog.bonus, 0, 1);
-        var extraMoney = dialog.used ? D.begging.cards[dialog.used].extraMoney || 0 : 0;
+        var chance = giveChance(n, dialog);
+        var extraMoney = dialog.favorAgreed ? D.begging.cards.favor.extraMoney : 0;
         n.engaged = false;
         n.asked = true;                                   // у одного человека просят один раз
         S.stats.asks++;
         var rt = rhTele(); rt.asks++;
         var ak = n.type === 'granny' ? 'granny' : n.kind;
         var ta = S.tele.asks[ak] || (S.tele.asks[ak] = { n: 0, ok: 0, sum: 0 });
-        ta.n++; res.who = ak; res.id = n.id; res.ok = 0;
+        ta.n++; res.who = ak; res.id = n.id; res.ok = 0; res.chance = chance; res.mood = dialog.mood;
         if (n.type === 'passerby') {
           var K = kindDef(n), r2 = rng();
           if (r2 < chance) {
@@ -1448,13 +1490,13 @@
             ta.ok++; ta.sum += m; res.ok = 1; res.got = m;
             rt.ok++; rt.money += m;
             requestSound('begOk_' + n.kind, m);
-          } else if (r2 < K.giveChance * (n.giveF || 1) + S.gs.give + dialog.bonus) {
+          } else if (r2 < giveChance(n, dialog, true)) {
             res.why = 'weather'; requestSound('begNoWeather');                 // дал бы, да погода не та
           } else {
             requestSound('begNo_' + n.kind);
           }
         } else if (chance < 1 && rng() >= chance) {
-          requestSound('grannyNo');                       // бабка подаёт всегда, если вид не отпугнул (отрицательная харизма)
+          requestSound('grannyNo');
         } else {
           S.stats.gave++;
           ta.ok++; rt.ok++; res.ok = 1;
@@ -1472,7 +1514,8 @@
         }
         var ui = D.ui.dialogue;
         res.variant = request.id; res.line = request.line;
-        res.reply = request.replies[ak][res.ok ? 'yes' : 'no'];
+        var replyKey = res.food ? 'food' : res.ok ? 'yes' : 'no';
+        res.reply = res.why === 'weather' ? D.encounterText.weatherRefusals[ak] : request.replies[ak][replyKey];
         if (res.food) res.outcome = res.drop ? ui.foodDropped : ui.foodReceived;
         else if (res.ok) res.outcome = ui.moneyReceived.replace('{n}', res.got);
         else res.outcome = res.why === 'weather' ? ui.weatherRefusal : ui.refusal;
@@ -1884,7 +1927,16 @@
       }
       return baseWalkSpeed() * factor;
     }
-    function giveChance(n) { return clamp((n.type === 'passerby' ? kindDef(n).giveChance * walkerMods().give * (n.giveF || 1) : 1) + S.gs.give, 0, 1); }   // харизма одежды: ± п.п.; giveF — настроение фазы, в которой человек вышел
+    function giveChance(n, dialog, dry) {
+      var def = kindDef(n), practice = D.begging.practice.begging[skillProgress('begging').level - 1];
+      var chance = def.giveChance + (def.giveMax - def.giveChance) * practice;
+      if (n.type === 'passerby') chance *= (n.giveF || 1) * (dry ? 1 : walkerMods().give);
+      dialog = dialog || (S.begging.dialog && S.begging.dialog.npcId === n.id ? S.begging.dialog : null);
+      // bonus хранится для старых слотов, в которых первый ход уже дал прибавку в процентных пунктах.
+      chance = clamp(chance, 0, 1);
+      if (dialog) chance = adjustOdds(chance, D.begging.moods[dialog.mood].ask * dialog.rapport);
+      return clamp(chance + S.gs.give + (dialog ? dialog.bonus : 0), 0, 1);
+    }
     function spawnInterval() {
       var I = rhythm().spawn;
       return rand(I.min, I.max) / walkerMods().spawn;
@@ -1911,10 +1963,18 @@
       for (i = 0; i < list.length; i++) { r -= list[i].weight; if (r < 0) return list[i]; }
       return list[list.length - 1];
     }
+    function binDropPoint() {
+      var bin = D.places.bin, offset = D.walkers.trash.dropOffset;
+      return { x: bin.x + offset.x, y: bin.y + offset.y };
+    }
     function buildPath(src, sitTime) {
       var WK = D.walkers, jit = rand(-WK.laneJitter, WK.laneJitter), out = [], i, q;
       for (i = 0; i < src.length; i++) {
-        q = { x: src[i].x, y: src[i].y };
+        q = src[i].dump ? binDropPoint() : { x: src[i].x, y: src[i].y };
+        if (src[i].counter) {
+          out.push({ x: WK.kioskCounter.x, y: WK.kioskCounter.approachY });
+          q = { x: WK.kioskCounter.x, y: WK.kioskCounter.y, counter: true };
+        }
         if (q.y >= WK.street.sidewalkTop) q.y += jit;                 // по тротуару идут не в затылок
         if (src[i].wait) q.wait = rand(src[i].wait[0], src[i].wait[1]);
         if (src[i].sit) { q.wait = sitTime; q.sit = true; }
@@ -2038,8 +2098,8 @@
       pt = n.path[n.leg];
       if (pt.bus) { n.state = 'busWait'; n.dir = 1; return true; }
       if (pt.wait) {
-        n.wait = pt.wait;
-        n.pose = pt.sit ? 'sit' : 'stand';
+        n.wait = pt.wait; n.walking = false;
+        n.pose = pt.counter ? 'atCounter' : pt.sit ? 'sit' : 'stand';
         if (pt.face) n.dir = pt.face;
         if (pt.sit && !ghost) log(S.hero.at === 'bench' ? 'grannySitNear' : 'grannySit');
         return true;
@@ -2396,8 +2456,9 @@
       if (t) {
         t.t += dt / taskSlowdown();
         if (t.t >= t.dur && t.kind === 'talk' && findNpc(t.npcId)) {
-          S.begging.dialog = { npcId: t.npcId, used: null, question: false, lastMove: null, socialGain: 0, unlocked: [], bonus: 0, feedback: '', step: dt };
-          ev('begOpen', { id: t.npcId, level: skillProgress('begging').level, xp: S.begging.xp, socialXp: S.begging.socialXp });
+          S.begging.dialog = newDialogue(findNpc(t.npcId), dt);
+          ev('begOpen', { id: t.npcId, mood: S.begging.dialog.mood, observation: S.begging.dialog.observationIndex,
+            level: skillProgress('begging').level, xp: S.begging.xp, socialXp: S.begging.socialXp });
           return;
         }
         if (t.t >= t.dur) finishHeroTask();
@@ -2470,7 +2531,7 @@
     function saveState() {
       ev('save', { day: dayNo() });
       var c = copy(S); c.sfx = [];
-      return { kind: 'bomzh-save', formatVersion: D.save.formatVersion, build: D.build, savedAt: new Date(now()).toISOString(),
+      return { kind: 'bomzh-save', formatVersion: D.save.formatVersion, yardLayout: D.navigation.version, build: D.build, savedAt: new Date(now()).toISOString(),
         day: dayNo(), hour: fmtHour(clockHour()), nextId: nextId, rng: rng.getState ? rng.getState() : null, field: { w: field.w, h: field.h }, S: c,
         rec: R ? { head: R.head, n: R.events.length, w: copy(R.w) } : null };
     }
@@ -2485,6 +2546,13 @@
         S.begging.socialXp = ((cards.talk || 0) + (cards.joke || 0) + (cards.askAboutYard || 0)) * D.begging.xpPerReply;
       }
       var dialog = S.begging.dialog;
+      if (dialog && dialog.mood === undefined) {
+        dialog.mood = 'calm';
+        dialog.observationIndex = 0;
+        dialog.rapport = 1;
+        dialog.favorAgreed = dialog.used === 'favor';
+        dialog.bonus = dialog.bonus || 0;
+      }
       // В старых слотах сохранился только ответ на прежнюю шутку. Новые пары начинаются со следующего выбора.
       if (S.begging.jokesTold === undefined) S.begging.jokesTold = 0;
       if (S.begging.talksTold === undefined) S.begging.talksTold = 0;
@@ -2524,7 +2592,13 @@
       if (bus && ((bus.state === 'in' && bus.x < stopX) || (bus.state === 'out' && bus.x > stopX))) {
         bus.x = 2 * stopX - bus.x;
       }
-      if (!walkable(S.hero.x,S.hero.y)) {
+      var oldYard = sv.yardLayout !== D.navigation.version;
+      if (oldYard && S.hero.at === 'pipe' && S.hero.asleep) {
+        S.hero.asleep = false;
+        S.tele.slT = 0;
+      }
+      var movedPlace = oldYard && ['bin', 'pipe', 'den'].includes(S.hero.at);
+      if (movedPlace || !walkable(S.hero.x,S.hero.y)) {
         var place = S.hero.at && D.places[S.hero.at];
         Object.assign(S.hero, place ? standPoint({kind:'place',id:S.hero.at}) : projectGround(S.hero.x,S.hero.y));
       }
@@ -2538,7 +2612,29 @@
       S.npcs.forEach(function (n) {
         if (n.type === 'dog') return;
         if (!walkable(n.x,n.y)) Object.assign(n, projectGround(n.x,n.y));
-        if (n.path && !n.navVersion) {
+        // В сохранённых маршрутах прежняя точка покупки была у правого торца.
+        if (n.path && /kiosk/i.test(n.route)) {
+          var oldStop = n.path.findIndex(function (pt, i) {
+            return i >= n.leg && pt.wait && pt.x === .352 && pt.y === .846;
+          });
+          if (oldStop >= 0) {
+            var counter = D.walkers.kioskCounter, waiting = oldStop === n.leg && n.wait > 0;
+            var stop = { x: counter.x, y: counter.y, counter: true, wait: n.path[oldStop].wait };
+            var replacement = waiting ? [stop] : [{ x: counter.x, y: counter.approachY }, stop];
+            if (waiting) { n.x = stop.x; n.y = stop.y; n.pose = 'atCounter'; }
+            n.path.splice.apply(n.path, [oldStop, 1].concat(replacement));
+            n.navVersion = 0;
+          }
+        }
+        // В старом дворе у бака было другое место. Ожидание, мусор и обратный путь сохраняются.
+        if (oldYard && n.path) {
+          var drop = n.path.findIndex(function (pt, i) { return i >= n.leg && pt.dump; });
+          if (drop >= 0) {
+            Object.assign(n.path[drop], binDropPoint());
+            if (drop === n.leg && n.wait > 0) Object.assign(n, binDropPoint());
+          }
+        }
+        if (n.path && (oldYard || !n.navVersion)) {
           n.path = n.path.slice(0,n.leg).concat(safeWalkerPath(n.path.slice(n.leg),n));
           n.navVersion = 1;
         }
@@ -2679,7 +2775,6 @@
   function $(id) { return document.getElementById(id); }
 
   function initUI() {
-    if (document.documentElement.classList.contains('walk-preview')) return;
     var elField = $('field');
     var busEl = null, trafficEl = null;
     var elPlaces = $('layer-places');
@@ -2687,7 +2782,7 @@
     var elBars = $('layer-bars');
     var elMenu = $('shop-menu');
     var dialoguePanel = $('dialogue-panel'), dialogueCards = $('dialogue-cards');
-    var dialogueResult = $('dialogue-result'), dialogueResultTimer = 0, dialogueSig = '';
+    var dialogueResult = $('dialogue-result'), dialogueSig = '';
     var elMenuGoods = $('shop-goods'), elMenuTitle = $('shop-title'), menuSig = null;
     var elGearSlots = $('gear-slots'), elGearSum = $('gear-sum'), elInvMark = $('inv-mark'), gearSlotEls = {}, gearSig = null;
     var elLog = $('log');
@@ -2941,7 +3036,6 @@
       menuSig = null; gearSig = null;
       dialogueSig = '';
       dialogueResult.hidden = true;
-      clearTimeout(dialogueResultTimer);
       elTiles.innerHTML = '';
       busEl = null;
       trafficEl = null;
@@ -3312,6 +3406,7 @@
           el.classList.toggle('walking', !!n.walking);
           el.classList.toggle('face-left', n.dir < 0);
           el.classList.toggle('sitting', n.pose === 'sit');
+          el.classList.toggle('at-counter', n.pose === 'atCounter');
           el.classList.toggle('trash', !!n.trash);
           var cst = catchOf(n).status;
           if (el.dataset.catch !== cst) el.dataset.catch = cst;
@@ -3493,6 +3588,11 @@
         elClock.dataset.rhythm = game.rhythm().id;
       }
       var h = (S.over && S.over.win) ? game.sunrise(D.time.days + 1) : game.clockHour();
+      // Гражданские минуты дают фасаду те же часы при паузе, ускорении и загрузке.
+      var minute = Math.floor(h * 1200) / 20;
+      var calendarDay = day + (game.isNight() && h < game.sunset(day) ? 1 : 0);
+      var facadeMinute = String(calendarDay * 1440 + minute);
+      if (elClock.dataset.minute !== facadeMinute) elClock.dataset.minute = facadeMinute;
       clockHand.setAttribute('transform', 'rotate(' + (h / 24 * 360).toFixed(2) + ' ' + CLOCK.c + ' ' + CLOCK.c + ')');
     }
 
@@ -3687,8 +3787,8 @@
       elStash.classList.toggle('drop', !!(on && invDrag && invDrag.moved));
       if (!on) return;
       var P = D.places.den;
-      elStash.style.left = ((P.x + 0.055) * 100) + '%';
-      elStash.style.top = ((P.y - 0.02) * 100) + '%';
+      elStash.style.right = ((1 - P.x) * 100) + '%';
+      elStash.style.top = ((P.y + 0.10) * 100) + '%';
       var box = elStash.children[1];
       box.innerHTML = '';
       for (var i = 0; i < cap; i++) {
@@ -3716,20 +3816,43 @@
       return null;
     }
 
-    function renderDialogueSkill(el, name, skill, gained) {
-      var ui = D.ui.dialogue;
-      el.children[0].textContent = name + ' · ' + ui.level + ' ' + skill.level;
-      el.children[1].textContent = ui.experience + ' ' + skill.xp + (skill.nextLevelXp === null ? '' : ' / ' + skill.nextLevelXp) +
-        (gained ? ' (+' + gained + ')' : '');
-      el.children[2].textContent = skill.nextCard ? ui.next + ' — «' + skill.nextCard + '»' : '';
+    function dialogueSkillBars(name, skill, gained, levels) {
+      if (!gained) return '';
+      var ui = D.ui.dialogue, before = skill.xp - gained;
+      var html = '<div class="dialogue-xp"><div class="dialogue-xp-heading"><strong>' + esc(name) +
+        '</strong><b>' + esc(ui.experience) + ' +' + gained + '</b></div>';
+      // Завершённая шкала остаётся видна рядом с остатком опыта на новом уровне.
+      for (var level = 1; level < levels.length; level++) {
+        var floor = levels[level - 1], threshold = levels[level];
+        if (before >= threshold || skill.xp < floor) continue;
+        var capacity = threshold - floor, previous = Math.max(0, before - floor);
+        var current = Math.min(capacity, skill.xp - floor);
+        var interval = ui.level + ' ' + level + ' → ' + (level + 1);
+        html += '<div class="dialogue-xp-labels"><span>' + esc(interval) + '</span><span>' + current + ' / ' + capacity +
+          '</span></div><div class="dialogue-xp-track" role="progressbar" aria-label="' + esc(name + ' · ' + interval) +
+          '" aria-valuemin="0" aria-valuenow="' + current + '" aria-valuemax="' + capacity + '">' +
+          '<span class="dialogue-xp-before" style="width:' + (100 * previous / capacity) + '%"></span>' +
+          '<span class="dialogue-xp-gain" style="width:' + (100 * (current - previous) / capacity) + '%"></span></div>';
+      }
+      if (skill.nextLevelXp === null) {
+        html += '<div class="dialogue-xp-labels">' + esc(ui.maxLevel) + ' · ' + skill.level + '</div>';
+      }
+      return html + '</div>';
+    }
+
+    function dialoguePercent(chance) {
+      if (chance > 0 && chance < .001) return '<0,1%';
+      if (chance < 1 && chance > .999) return '>99,9%';
+      return (chance * 100).toLocaleString('ru-RU', { maximumFractionDigits: 1 }) + '%';
     }
 
     function renderDialogue() {
-      if (!started || game.state.over || !game.state.begging.dialog || gameMenuOpen || slotMode) {
+      if (!started || game.state.over || (!game.state.begging.dialog && dialogueResult.hidden) || gameMenuOpen || slotMode) {
         if (dialoguePanel.open) dialoguePanel.close();
         dialogueSig = '';
         return;
       }
+      if (!dialogueResult.hidden) return;
       var state = game.state.begging, sig = [state.dialog.npcId, state.dialog.used, state.dialog.question, state.xp, state.socialXp].join('|');
       if (sig === dialogueSig) return;
       var view = game.begView();
@@ -3737,6 +3860,7 @@
       var ui = D.ui.dialogue;
       $('dialogue-context').textContent = ui.context;
       $('dialogue-title').textContent = view.name;
+      $('dialogue-observation').textContent = view.observation;
       var rows = { student: 0, worker: 3, coat: 6, fat: 9, drunk: 12, granny: 15 };
       dialoguePanel.style.setProperty('--portrait-row', ((rows[view.kind] || 0) * 100 / 21) + '%');
       var feedback = $('dialogue-feedback');
@@ -3747,15 +3871,28 @@
           feedback.innerHTML += '<br><strong>' + esc(view.name) + '</strong> — ' + esc(view.feedback);
         }
       } else feedback.textContent = view.feedback;
-      renderDialogueSkill($('dialogue-social-skill'), ui.social, view.skills.social, view.socialGain);
-      renderDialogueSkill($('dialogue-beg-skill'), ui.skill, view.skills.begging, 0);
+      var outcome = view.lastOutcome, summary = '';
+      if (outcome) {
+        var before = dialoguePercent(outcome.before), after = dialoguePercent(outcome.after);
+        summary = (outcome.ok ? ui.moodYes : ui.moodNo) + ' · ' + ui.helpChance + ' ' +
+          (before === after ? '' : before + ' → ') + after;
+      }
+      $('dialogue-outcome').textContent = summary;
       var endings = { ask: 1, goodbye: 2 };
       var cards = view.cards.sort(function (a, b) { return (endings[a.id] || 0) - (endings[b.id] || 0); });
       dialogueCards.innerHTML = cards.map(function (card) {
-        var odds = card.id === 'ask' ? ' <span id="dialogue-chance">' + esc(ui.chance) + ' ' + Math.round(view.chance * 100) + '%</span>' : '';
+        var odds = '';
+        if (card.enabled && card.chance != null) {
+          odds = '<span class="dialogue-odds">' + esc(card.id === 'ask' ? ui.helpChance : ui.chance) +
+            ' ' + esc(dialoguePercent(card.chance)) + '</span>';
+        }
+        var description = card.description;
+        if (card.id === 'ask' && view.kind === 'granny') {
+          description = ui.moneyOdds + ' ' + dialoguePercent(view.moneyChance) + ' · ' + ui.foodOdds + ' ' + dialoguePercent(view.foodChance);
+        }
         return '<button type="button" data-dialogue-card="' + esc(card.id) + '"' + (card.enabled ? '' : ' disabled') +
           '><strong>' + esc(card.label) + '</strong>' + (card.line ? '<small>' + esc(card.line) + '</small>' : '') +
-          '<small>' + esc(card.description) + odds + '</small></button>';
+          '<small>' + esc(description) + '</small>' + odds + '</button>';
       }).join('');
       if (!dialoguePanel.open) {
         dialogueResult.hidden = true;
@@ -3772,26 +3909,38 @@
       var result = game.playBegCard(id);
       if (result && typeof result === 'object') {
         var ui = D.ui.dialogue;
-        var summary = dialogueResult.firstElementChild;
+        var summary = $('dialogue-exchange');
         if (result.exchange) {
           summary.innerHTML = '<b>' + esc(D.hero.name) + '</b> — ' + esc(result.exchange.line) +
             '<br><b>' + esc(result.exchange.name) + '</b> — ' + esc(result.exchange.reply) +
             (result.text ? '<br><b>' + esc(result.text) + '</b>' : '');
         } else summary.textContent = result.text;
-        var growth = [];
-        if (result.socialGain) growth.push(ui.social + ' +' + result.socialGain);
-        if (result.xpGain) growth.push(ui.skill + ' +' + result.xpGain);
-        if (result.unlocked.length) growth.push(ui.unlocked + ' «' + result.unlocked.join('», «') + '»');
-        dialogueResult.lastElementChild.textContent = growth.join(' · ');
+        $('dialogue-growth').innerHTML =
+          dialogueSkillBars(ui.social, result.skills.social, result.socialGain, D.begging.socialLevels) +
+          dialogueSkillBars(ui.skill, result.skills.begging, result.xpGain, D.begging.levels);
+        $('dialogue-unlocked').textContent = result.unlocked.length ? ui.unlocked + ' «' + result.unlocked.join('», «') + '»' : '';
         dialogueResult.hidden = false;
-        clearTimeout(dialogueResultTimer);
-        dialogueResultTimer = setTimeout(function () { dialogueResult.hidden = true; }, result.exchange ? ui.askResultMs : ui.resultMs);
+        $('dialogue-context').textContent = ui.resultTitle;
+        dialoguePanel.scrollTop = 0;
+        $('dialogue-result-close').focus({ preventScroll: true });
       }
       render();
     }
+    function closeDialogueResult() {
+      dialogueResult.hidden = true;
+      dialoguePanel.close();
+      dialogueSig = '';
+    }
+    $('dialogue-result-close').addEventListener('click', closeDialogueResult);
+    dialoguePanel.addEventListener('click', function (e) {
+      if (dialogueResult.hidden || e.target !== dialoguePanel) return;
+      var box = dialoguePanel.getBoundingClientRect();
+      if (e.clientX < box.left || e.clientX >= box.right || e.clientY < box.top || e.clientY >= box.bottom) closeDialogueResult();
+    });
     dialoguePanel.addEventListener('cancel', function (e) {
       e.preventDefault();
-      chooseDialogueCard('goodbye');
+      if (dialogueResult.hidden) chooseDialogueCard('goodbye');
+      else closeDialogueResult();
     });
     dialogueCards.addEventListener('click', function (e) {
       var card = e.target.closest('button[data-dialogue-card]');
@@ -4213,7 +4362,7 @@
       var dt = lastTs ? (ts - lastTs) / 1000 : 0;
       lastTs = ts;
       if (dt > D.ui.maxFrameDt) dt = D.ui.maxFrameDt;
-      if (started && !paused && !game.state.over && !game.state.begging.dialog && dt > 0) { game.advance(dt); game.noteWarnings(); }
+      if (started && !paused && !game.state.over && !game.state.begging.dialog && dialogueResult.hidden && dt > 0) { game.advance(dt); game.noteWarnings(); }
       if (started && game.state.phase !== store.lastPhase) {
         store.lastPhase = game.state.phase;
         if (game.state.phase % 2 === 0 && !game.state.over) writeSave();
@@ -4225,7 +4374,7 @@
         var hasFire = false;
         for (var fi = 0; fi < SS.items.length; fi++) if (SS.items[fi].type === 'fire') hasFire = true;
         global.BomzhSound.frame({
-          paused: paused || !started || !!SS.begging.dialog, speed: SS.speed, night: game.isNight(),
+          paused: paused || !started || !!SS.begging.dialog || !dialogueResult.hidden, speed: SS.speed, night: game.isNight(),
           wind: SS.weather.wind, precip: SS.weather.precip, type: SS.weather.type,
           bus: SS.bus, listenerX: SS.hero.x, listenerY: SS.hero.y,
           walking: SS.hero.walking, walkSpeed: game.walkSpeed(), at: SS.hero.at,

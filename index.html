@@ -4,11 +4,10 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <title>Бомж v0.1</title>
-<script>if (new URLSearchParams(location.search).get('walktest') === '1') document.documentElement.classList.add('walk-preview');</script>
-<link rel="stylesheet" href="style.css?v=039">
-<link rel="stylesheet" href="art.css?v=039">
-<link rel="stylesheet" href="menu.css?v=039">
-<link rel="stylesheet" href="kiosk.css?v=030b">
+<link rel="stylesheet" href="style.css?v=040">
+<link rel="stylesheet" href="art.css?v=040">
+<link rel="stylesheet" href="menu.css?v=040">
+<link rel="stylesheet" href="kiosk.css?v=040">
 </head>
 <body>
 <div id="game">
@@ -26,6 +25,7 @@
   </div>
 
   <div id="hud">
+    <button id="game-menu-btn" type="button" aria-haspopup="dialog" aria-controls="game-menu-modal" title="Меню (Esc)">Меню</button>
     <div id="weather">
       <span id="weather-icon"></span>
       <div id="weather-text">
@@ -34,22 +34,26 @@
       </div>
     </div>
 
-    <div id="clock">
-      <span id="clock-dial"></span>
-      <span id="phase-label">День 1 из 7</span>
+    <div class="hud-agenda">
+      <div id="clock">
+        <span id="clock-dial"></span>
+        <span id="phase-label">День 1 из 7</span>
+      </div>
+
+      <div id="goals"></div>
     </div>
 
-    <div id="goals"></div>
+    <div class="hud-controls">
+      <div id="sound-panel">
+        <button id="sound-btn" type="button" aria-label="Звук: вкл/выкл (M)" title="Звук: вкл/выкл (M)">🔊</button>
+        <input id="sound-vol" type="range" min="0" max="100" step="1" aria-label="Громкость">
+      </div>
+      <div id="speed-panel">
+        <button id="pause-btn" type="button" aria-label="Пауза">⏸</button>
+        <span id="speed-btns"></span>
+      </div>
+    </div>
 
-    <div id="sound-panel">
-      <button id="sound-btn" type="button" aria-label="Звук: вкл/выкл (M)" title="Звук: вкл/выкл (M)">🔊</button>
-      <input id="sound-vol" type="range" min="0" max="100" step="1" aria-label="Громкость">
-    </div>
-    <div id="speed-panel">
-      <button id="pause-btn" type="button" aria-label="Пауза">⏸</button>
-      <span id="speed-btns"></span>
-    </div>
-    <button id="game-menu-btn" type="button" aria-haspopup="dialog" aria-controls="game-menu-modal" title="Меню (Esc)">Меню</button>
   </div>
 
   <div id="tooltip" class="hidden">
@@ -81,6 +85,7 @@
         <span class="stat-value" id="stat-energy-value">0</span>
       </div>
       <div id="money"><span id="money-icon">💰</span><span id="money-value">0</span> ₽</div>
+      <details id="events"><summary>Журнал</summary><div id="log"></div></details>
     </div>
     <div id="gear">
       <div id="gear-head"><span id="gear-title">Надето</span><span id="gear-sum"></span></div>
@@ -90,24 +95,27 @@
       <div id="inv-head"><span id="inv-title">Пакет</span> <span id="inv-count">0/6</span><span id="inv-mark" class="hidden"></span></div>
       <div id="inv-slots"></div>
     </div>
-    <div id="log"></div>
+
   </div>
   <div id="pause-banner" class="hidden"><span id="pause-title">Пауза</span><span id="pause-note" class="hidden"></span></div>
   <dialog id="dialogue-panel" aria-labelledby="dialogue-title">
     <header class="dialogue-head">
       <div class="dialogue-portrait" aria-hidden="true"><span></span></div>
+      <button id="dialogue-result-close" type="button" aria-label="Закрыть итог разговора">×</button>
       <div><div id="dialogue-context"></div><h2 id="dialogue-title" tabindex="-1"></h2></div>
     </header>
     <div class="dialogue-body">
+      <p id="dialogue-observation"></p>
       <p id="dialogue-feedback" aria-live="polite" tabindex="-1"></p>
+      <p id="dialogue-outcome" role="status"></p>
       <div id="dialogue-cards"></div>
-      <div class="dialogue-skills">
-        <div class="dialogue-skill" id="dialogue-social-skill"><strong></strong><span></span><small></small></div>
-        <div class="dialogue-skill" id="dialogue-beg-skill"><strong></strong><span></span><small></small></div>
+      <div id="dialogue-result" hidden role="status">
+        <div id="dialogue-exchange"></div>
+        <div id="dialogue-growth"></div>
+        <div id="dialogue-unlocked"></div>
       </div>
     </div>
   </dialog>
-  <div id="dialogue-result" hidden role="status"><strong></strong><span></span></div>
 
   <div id="start-screen" aria-labelledby="start-title" role="region">
     <div id="start-card">
@@ -115,13 +123,12 @@
       <div id="start-btns">
         <button id="start-btn" type="button">Начать новую игру</button>
         <button id="continue-btn" type="button">Загрузиться</button>
-        <button id="menu-about-btn" type="button">О разработчиках</button>
+        <button id="menu-about-btn" type="button">О создателях</button>
         <button id="menu-exit-btn" type="button">Выход</button>
       </div>
       <div id="start-stale" class="hidden" role="status"></div>
       <div class="menu-tools">
         <button id="menu-help-btn" type="button">Как играть</button>
-        <a id="menu-walk-link" href="?walktest=1">Проверить походку</a>
       </div>
     </div>
     <dialog id="menu-info-dialog" aria-labelledby="menu-info-title">
@@ -135,6 +142,7 @@
       <section id="menu-about" hidden>
         <p>Автор игры и геймдизайнер — Алексей.</p>
         <p>Разработка с помощью ИИ.</p>
+        <p>Спасибо моим друзьям Глебу, Линару и Борису за поддержку и тестирование. Ваши впечатления от игры помогают мне решать, что улучшить во дворе.</p>
       </section>
       <section id="menu-exit" hidden>
         <p>Чтобы выйти из игры, закрой эту вкладку браузера.</p>
@@ -142,17 +150,6 @@
       <button id="menu-info-close" type="button">В меню</button>
     </dialog>
   </div>
-
-  <section id="walk-controls" aria-label="Проверка походки">
-    <strong id="walk-stage" aria-live="polite">У остановки</strong>
-    <div role="group" aria-label="Темп ходьбы">
-      <button id="walk-normal" type="button" aria-pressed="false">Быстрый ×1</button>
-      <button id="walk-slow" type="button" aria-pressed="true">Спокойный ×0,65</button>
-    </div>
-    <button id="walk-pause" type="button">Пауза</button>
-    <button id="walk-repeat" type="button">Повторить</button>
-    <a id="walk-exit" href="./index.html">В меню</a>
-  </section>
 
   <div id="game-menu-modal" class="hidden" role="dialog" aria-modal="true" aria-labelledby="game-menu-title">
     <div id="game-menu-panel">
@@ -182,11 +179,10 @@
   </div>
 
 </div>
-<script src="data.js?v=039"></script>
-<script src="game.js?v=039"></script>
-<script src="sound.js?v=039"></script>
-<script src="art.js?v=039"></script>
-<script src="menu.js?v=039"></script>
-<script src="walktest.js?v=031"></script>
+<script src="data.js?v=040"></script>
+<script src="game.js?v=040"></script>
+<script src="sound.js?v=040"></script>
+<script src="art.js?v=040"></script>
+<script src="menu.js?v=040"></script>
 </body>
 </html>

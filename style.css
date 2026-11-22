@@ -519,21 +519,21 @@ html, body {
 
 /* ---------- Погода (плашка в панели мира), скорость тепла, подсказка ---------- */
 #weather {
-  flex: 0 1 auto;
-  min-width: 0;
+  flex: 0 1 27rem;
+  min-width: min-content;
   display: flex;
   align-items: center;
   gap: 8px;
   pointer-events: none;
 }
 #weather-icon { flex: none; width: 34px; height: 34px; font-size: 24px; line-height: 34px; text-align: center; }
-#weather-text { min-width: 0; }
+#weather-text { flex: 1; min-width: min-content; }
 #weather-main { display: flex; flex-wrap: nowrap; align-items: baseline; gap: 0 9px; white-space: nowrap; }
 #weather-temp { font-size: 18px; font-weight: 700; line-height: 20px; }
 #weather-wind, #weather-precip { font-size: 12px; font-weight: 700; }
-#weather-sub { display: flex; align-items: baseline; gap: 0 8px; font-size: 11px; line-height: 14px; white-space: nowrap; }
-#weather-feels { font-size: 12px; font-weight: 700; }
-#weather-caption { font-size: 11px; font-weight: 400; }
+#weather-sub { contain: inline-size; display: flex; align-items: baseline; gap: 0 8px; font-size: 11px; line-height: 14px; white-space: nowrap; }
+#weather-feels { flex: none; font-size: 12px; font-weight: 700; }
+#weather-caption { min-width: 0; overflow: hidden; text-overflow: ellipsis; font-size: 11px; font-weight: 400; }
 #warmth-rate { min-width: 58px; font-size: 12px; white-space: nowrap; font-variant-numeric: tabular-nums; }
 #tooltip {
   position: fixed;
@@ -648,7 +648,7 @@ html, body {
 @media (max-width: 1500px) {
   #bottom-bar { gap: 12px; padding-left: 10px; padding-right: 10px; }
   #vitals { gap: 5px 12px; }
-  .gear-slot { width: 35px; }
+  .gear-slot { width: 39px; }
   #gear-slots { gap: 3px; }
   .gear-ico { width: 29px; height: 29px; }
   .gear-name { font-size: 7.5px; }
