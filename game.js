@@ -141,7 +141,7 @@
     function wornList() { var o = {}, n = 0; for (var sl in S.worn) if (S.worn[sl]) { o[sl] = S.worn[sl].type; n++; } return n ? o : undefined; }
     function snap(why) {
       var h = S.hero;
-      ev('snap', { why: why, sat: r1(h.satiety), warm: r1(h.warmth), hp: r1(h.health), en: r1(h.energy), money: S.money,
+      ev('snap', { why: why, sat: r1(h.satiety), warm: r1(h.warmth), hp: r1(h.health), en: r1(h.energy), money: S.money, lastDrinkDay: S.lastDrinkDay,
         inv: S.inv.map(function (i) { return i.type; }), worn: wornList(), x: r3(h.x), y: r3(h.y), at: h.at, doing: doing() });
     }
     function wxSig() { var w = S.weather; return w ? w.type + '|' + w.temp + '|' + w.wind + '|' + w.precip : ''; }
@@ -505,7 +505,7 @@
         if (!P) return null;
         var lines;
         if (id === 'bin') {
-          lines = S.binStock > 0 ? fill(T.places.bin, { n: S.binStock, s: plain(P.searchSeconds * S.gs.sp.searchTime * slow) }) : T.places.binEmpty.slice();
+          lines = S.binStock > 0 ? fill(T.places.bin, { n: S.binStock, s: plain(placeTaskDef('bin').dur * slow) }) : T.places.binEmpty.slice();
         } else if (id === 'recycle') {
           lines = fill(T.places.recycle, { b: P.prices.bottle, c: P.prices.can, s: plain(P.processSeconds * slow) });
         } else if (id === 'kiosk') {
@@ -526,6 +526,7 @@
           lines = S.den.stage > 0 ? fill(T.places.denBuilt, { net: num(denPreview(false)), sleep: num(denPreview(true)), pipe: num(pg) }) : T.places.denBare.slice();
           if (nx) lines.push((nx.ok ? T.places.denReady : T.places.denNext).split('{name}').join(nx.def.name.toLowerCase()).split('{need}').join(denNeedText(nx)));
           else lines.push(T.places.denDone.split('{n}').join(S.den.stash.length).split('{c}').join(stashCap()));
+          if (janitorTarget() === 'den') lines.push(D.den.janitorLesson.buildTip.replace('{s}', plain(placeTaskDef('den').dur * slow)));
         } else if (id === 'pipe') {
           lines = fill(T.places[['pipeCalm', 'pipeLight', 'pipeStrong'][Math.min(S.weather.wind, 2)]], { g: num(H.pipeGain), net: num(H.pipeGain - H.outdoorLoss) });
         } else {
@@ -546,7 +547,8 @@
         var u = def.use || {}, F = D.fire, fb = def.burn || D.items.cardboard.burn;
         var vars = {
           p: D.places.recycle.prices[it.type], sat: u.satiety, s: plain((u.seconds || (it.type === 'matches' ? F.craftSeconds : 0)) * slow), w: u.warmth, hp: u.riskHealth || -(u.health || 0),
-          risk: Math.round((u.riskChance || 0) * S.gs.sp.scrapsRisk * 100), burn: Math.round(F.burnSeconds * fb / F.burnRef / H.fireBurn), feed: Math.round(fb / H.fireBurn),
+          risk: S.janitor && S.janitor.spoiledScrapsId === it.id ? 100 : Math.round((u.riskChance || 0) * S.gs.sp.scrapsRisk * 100),
+          burn: Math.round(F.burnSeconds * fb / F.burnRef / H.fireBurn), feed: Math.round(fb / H.fireBurn),
           g: num(F.warmthPerSecond), t: it.timeLeft !== undefined ? Math.max(0, Math.ceil(it.timeLeft / H.fireBurn)) : 0,
           burnNote: H.fireBurn > 1.05 ? T.fireBurnNote.split('{m}').join(plain(H.fireBurn)) : '',
           stats: statText(statList(it.type))
@@ -649,7 +651,10 @@
         else if (h.walking || h.move) doing = T.doing.walking;
         else doing = T.doing[h.at] || T.doing.idle;
         var out = [doing];
-        if (slow > 1) out.push(T.doing.tired.split('{m}').join(plain(slow)));
+        if (slow > 1) {
+          var reason = dependenceStatus() === 'withdrawal' ? T.doing.withdrawal : T.doing.tired;
+          out.push(reason.split('{m}').join(plain(slow)));
+        }
         for (i = 0; i < H.parts.length; i++) {
           out.push(heatLabel(H.parts[i].key) + ': ' + num(H.parts[i].v) + '/с');
         }
@@ -661,6 +666,7 @@
 
     /* ---------- задачи (data.js: goals) ---------- */
     function goals() {
+      if (janitorLessonActive()) return [janitorGoal()];
       var list = D.goals.map(function (G) {
         var done = 0, total = 1;
         if (G.kind === 'surviveNights') { total = D.time.days; done = Math.min(total, Math.floor(S.phase / 2)); }
@@ -671,6 +677,7 @@
         };
       });
       list.push(denGoal());                                 // правка 022: ближняя цель — лежбище
+      if (S.janitor && S.janitor.stage === 'debt') list.push(janitorGoal());
       return list;
     }
 
@@ -803,7 +810,7 @@
       emit('wake');
     }
     function toggleSleep() {
-      if (S.over || S.begging.dialog) return;
+      if (S.over || inConversation() || janitorLessonActive()) return;
       var h = S.hero;
       if (h.asleep) { wake('wake'); return; }
       if (h.at === 'pipe') { log('pipeNoSleep'); return; }
@@ -821,8 +828,14 @@
         S.speed = v;
       }
     }
+    function dependenceStatus() {
+      var days = dayNo() - S.lastDrinkDay;
+      if (days === 0) return 'covered';
+      return days > 1 ? 'withdrawal' : 'due';
+    }
     function taskSlowdown() {
-      return S.hero.energy < D.hero.tiredThreshold ? D.hero.tiredTaskMultiplier : 1;
+      var fatigue = S.hero.energy < D.hero.tiredThreshold ? D.hero.tiredTaskMultiplier : 1;
+      return dependenceStatus() === 'withdrawal' ? fatigue * D.hero.dependence.taskMultiplier : fatigue;
     }
 
     /* Навигация по точке опоры. Касание ребра разрешено, пересечение внутренности — нет. */
@@ -964,10 +977,16 @@
     /* Дело героя с таймером на месте. autoRepeat у места в data.js — повторять, пока доступно. */
     function placeTaskDef(id) {
       var P = D.places[id];
-      if (id === 'bin') return { kind: 'search', dur: P.searchSeconds * S.gs.sp.searchTime, available: S.binStock > 0, blockedText: 'binEmpty', startText: 'searching' };
+      if (id === 'bin') {
+        var search = janitorTarget() === 'bin' ? D.den.janitorLesson.searchSeconds : P.searchSeconds;
+        return { kind: 'search', dur: search * S.gs.sp.searchTime, available: S.binStock > 0, blockedText: 'binEmpty', startText: 'searching' };
+      }
       if (id === 'den') {                                // правка 022: есть всё на следующую ступень — строить; голый лаз без материалов — не лечь
         var nx = denNext();
-        if (nx && nx.ok) return { kind: 'build', dur: nx.def.seconds, available: true, startText: 'denBuildStart' };
+        if (nx && nx.ok) {
+          var seconds = janitorTarget() === 'den' ? D.den.janitorLesson.buildSeconds : nx.def.seconds;
+          return { kind: 'build', dur: seconds, available: true, startText: 'denBuildStart' };
+        }
         if (S.den.stage === 0) return { kind: 'build', dur: 0, available: false, blockedText: 'denNeed', vars: { need: denNeedText(nx) } };
         return null;
       }
@@ -1001,7 +1020,7 @@
         // недоеденное возвращается в пакет, а если места уже нет — на землю
         if (!invFull()) S.inv.push({ id: t.item.id, type: t.item.type });
         else {
-          spawnItemNear(t.item.type, S.hero.x, S.hero.y);
+          spawnItemNear(t.item.type, S.hero.x, S.hero.y).id = t.item.id;
           log('invFullDrop', { name: D.items[t.item.type].name });
         }
       } else if (t.kind === 'talk') {
@@ -1213,6 +1232,7 @@
       var Wk = D.hero.walk, v = baseWalkSpeed();
       if (S.hero.energy < D.hero.tiredThreshold) v *= Wk.tiredFactor;
       if (invFull()) v *= Wk.fullBagFactor;
+      if (dependenceStatus() === 'withdrawal') v *= D.hero.dependence.walkFactor;
       return v * S.gs.sp.walk;
     }
     /* Расстояние в логических единицах (1 = высота поля, ширина = layout.logicalAspect): не зависит от размера окна */
@@ -1220,6 +1240,10 @@
     /* Где герой встаёт, чтобы работать с целью */
     function standPoint(t, x, y) {
       var Wk = D.hero.walk;
+      if (t && t.kind === 'janitor') {
+        var keeper = janitorView();
+        if (keeper) return { x: keeper.x, y: keeper.y };
+      }
       if (t && t.kind === 'place') {
         var place = D.places[t.id], stand = place.heroStand || L.heroStand;
         return clampPos(place.x + stand.x, place.y + stand.y);
@@ -1241,10 +1265,12 @@
     }
     /* Приказ «иди»: к месту, встречному, предмету, костру или в точку. Отменяет прежний маршрут и дело. */
     function order(target, x, y) {
-      if (S.over || S.begging.dialog) return;
+      if (S.over || inConversation()) return;
+      if (janitorLessonActive() && (!target || target.kind !== 'place' || target.id !== janitorTarget())) return;
+      if (target && target.kind === 'janitor' && !janitorView()) return;
       /* Приказ в никуда (цели нет в мире, точки нет) игнорируется: герой продолжает прежнее, журнал и запись не трогаем. */
       var ok = isFinite(x) && isFinite(y) && x !== null && y !== null;
-      if (!ok && target) ok = (target.kind === 'place' && !!D.places[target.id]) || (target.kind === 'npc' && !!findNpc(target.id)) || (target.kind === 'item' && !!findItem(target.id));
+      if (!ok && target) ok = target.kind === 'janitor' || (target.kind === 'place' && !!D.places[target.id]) || (target.kind === 'npc' && !!findNpc(target.id)) || (target.kind === 'item' && !!findItem(target.id));
       if (!ok) return;
       var was = R ? curOrder() : null;
       wake('wake');
@@ -1286,6 +1312,13 @@
     /* Герой встал у места: начать дело или занять место */
     function enterPlace(id, walked, hoped) {
       var P = D.places[id];
+      if (id === 'bench' && S.janitor && S.janitor.stage === 'return') {
+        S.hero.at = 'bench';
+        S.moveDir = { x: 0, y: 0 };
+        S.moveHold = true;
+        janitorStage('report');
+        return;
+      }
       if (id === 'entrance' && entranceBlocked()) {
         if (entranceBlocked() === 'cop') { S.tele.entranceCop++; log('entranceCop'); }
         else {
@@ -1338,13 +1371,19 @@
         var len = Math.sqrt(kx * kx + ky * ky);
         p = boundedPos(h.x + kx / len * sp * dt / L.logicalAspect, h.y + ky / len * sp * dt);
         p = slideWalk(h, p.x, p.y);
-        if (p.x !== h.x || p.y !== h.y) { h.walking = true; S.walkTime += dt; }
+        if (p.x !== h.x || p.y !== h.y) { h.walking = true; if (!janitorLessonActive()) S.walkTime += dt; }
         if (kx) h.dir = kx < 0 ? -1 : 1;
         h.x = p.x; h.y = p.y;
         return;
       }
       var m = h.move;
       if (!m) return;
+      if (m.target && m.target.kind === 'janitor') {
+        var keeper = janitorView();
+        if (!keeper) { h.move = null; return; }
+        if (nearJanitor(keeper)) { openJanitorTalk(); return; }
+        m.x = keeper.x; m.y = keeper.y;
+      }
       if (m.target && m.target.kind === 'npc') {          // встречный мог уйти, пока шли
         var n = findNpc(m.target.id);
         if (!talkable(n)) { h.move = null; S.tele.missed++; ev('missed', { id: m.target.id, who: n ? who(n) : m.target.type }); log('npcGone', { name: m.target.name || D.npcs.passerby.name }); return; }
@@ -1355,8 +1394,9 @@
       if (m.target && m.target.kind === 'item' && !findItem(m.target.id)) { h.move = null; log('itemGone'); return; }
       var travel = moveOnGround(h, m.x, m.y, sp * dt);
       h.walking = travel.moved > 0 && !travel.arrived;
-      S.walkTime += travel.moved / sp;
+      if (!janitorLessonActive()) S.walkTime += travel.moved / sp;
       if (travel.arrived) {
+        if (m.target && m.target.kind === 'janitor') { openJanitorTalk(); return; }
         if (m.target && m.target.kind === 'npc') {       // пришёл в точку встречи раньше — ждёт, пока тот подойдёт
           var tn = findNpc(m.target.id);
           if (tn && dist(h.x, h.y, tn.x, tn.y) <= D.walkers.contact && canWalk(h.x,h.y,tn.x,tn.y)) { h.move = null; arrive(m.target); }
@@ -1368,7 +1408,8 @@
     }
     /* Клавиши движения: (0,0) — стоим. Нажатие отменяет маршрут и дело. */
     function setMoveDir(dx, dy) {
-      if (S.over || S.begging.dialog) return;
+      if (S.over || inConversation()) return;
+      if (S.janitor && S.janitor.stage === 'report' && (dx || dy)) return;
       if (R) {
         var mv = !!(dx || dy);
         if (mv && R.w.km === null) { R.w.km = S.total; ev('keys', { dx: dx, dy: dy, by: inCtx.by, paused: inCtx.paused ? 1 : 0, was: curOrder() }); }
@@ -1384,13 +1425,21 @@
     /* Что рядом, с чем можно сделать действие (клавиша E) */
     function nearby() {
       var h = S.hero, Wk = D.hero.walk, best = null, bd = 1e9, i, dd;
-      if (S.over || h.asleep || h.task || h.move) return null;
+      if (S.over || inConversation() || h.asleep || h.task || h.move) return null;
+      if (!janitorLessonActive() && nearJanitor(janitorView())) {
+        return { kind: 'janitor', id: 'janitor', label: D.den.janitorLesson.talkAction };
+      }
       for (var id in D.places) {
+        if (janitorLessonActive() && id !== janitorTarget()) continue;
         if (h.at === id && (!placeTaskDef(id) || S.menuOpen)) continue;
         var sp = standPoint({ kind: 'place', id: id });
         dd = dist(h.x, h.y, sp.x, sp.y);
-        if (dd <= Wk.reachPlace && dd < bd && canWalk(h.x,h.y,sp.x,sp.y)) { bd = dd; best = { kind: 'place', id: id, label: D.places[id].action }; }
+        if (dd <= Wk.reachPlace && dd < bd && canWalk(h.x,h.y,sp.x,sp.y)) {
+          bd = dd;
+          best = { kind: 'place', id: id, label: id === 'bench' && janitorTarget() === 'bench' ? D.den.janitorLesson.talkAction : D.places[id].action };
+        }
       }
+      if (janitorLessonActive()) return best;
       for (i = 0; i < S.npcs.length; i++) {
         var n = S.npcs[i];
         if (!talkable(n)) continue;
@@ -1409,6 +1458,7 @@
       var t = nearby();
       if (!t) return false;
       ev('act', { to: tgt(t), by: inCtx.by, paused: inCtx.paused ? 1 : 0 });
+      if (t.kind === 'janitor') return openJanitorTalk();
       if (t.kind === 'place' && D.places[t.id].heroStand) {
         order(t);
         S.moveHold = true;
@@ -1431,7 +1481,8 @@
       h.task = null;
       if (t.kind === 'search') {
         var P = D.places.bin;
-        var type = S.binTop.length ? S.binTop.pop() : rollLoot(binLoot());   // сверху лежит то, что вынесли жильцы; пока лежбище не достроено — таблица щедрее на строительное
+        var lesson = S.janitor && S.janitor.stage === 'bin';
+        var type = lesson ? D.den.janitorLesson.finds[S.janitor.searches] : (S.binTop.length ? S.binTop.pop() : rollLoot(binLoot()));
         S.binStock--;
         if (S.binTop.length > S.binStock) S.binTop.splice(0, S.binTop.length - S.binStock);
         teleInc(S.tele.finds, type);
@@ -1439,6 +1490,13 @@
         log({ bottle: 'findBottle', can: 'findCan', scraps: 'findScraps', cardboard: 'findCardboard', newspaper: 'findNewspaper', rags: 'findRags', boards: 'findBoards', film: 'findFilm' }[type]);
         res.found = type;
         if (!give(type, P.x, P.y)) res.drop = 1;
+        if (lesson) {
+          var found = res.drop ? S.items[S.items.length - 1] : S.inv[S.inv.length - 1];
+          if (type === 'scraps') S.janitor.spoiledScrapsId = found.id;
+          S.janitor.searches++;
+          ev('janitorFind', { it: type, id: found.id, n: S.janitor.searches });
+          if (S.janitor.searches === D.den.janitorLesson.finds.length) janitorStage('den');
+        }
       } else if (t.kind === 'sell') {
         var si = sellableIndex();
         if (si >= 0) {
@@ -1464,6 +1522,7 @@
         }
       } else if (t.kind === 'build') {
         denBuildFinish(res);
+        if (res.ok && S.janitor && S.janitor.stage === 'den') janitorStage('return');
       } else if (t.kind === 'shop') {
         S.menuOpen = true;
         log(t.placeId === 'stall' ? 'stallOpen' : 'shopOpen');
@@ -1532,7 +1591,7 @@
         }
         if (t.item.type === 'scraps') {
           S.tele.scrapsEaten++;
-          if (rng() < u.riskChance * S.gs.sp.scrapsRisk) {
+          if ((S.janitor && S.janitor.spoiledScrapsId === t.item.id) || rng() < u.riskChance * S.gs.sp.scrapsRisk) {
             S.tele.scrapsBad++; res.bad = 1;
             log('eatScrapsBad', { n: u.riskHealth });
             damage(u.riskHealth, 'other');
@@ -1544,14 +1603,18 @@
           log('eatShawarma');
         } else if (t.item.type === 'vodka') {
           S.tele.vodka++;
+          var priorStatus = dependenceStatus();
+          S.lastDrinkDay = dayNo();
           log('drinkVodka');
+          if (priorStatus === 'withdrawal') appendLogLine(D.hero.dependence.relief);
+          ev('dailyDrink', { day: S.lastDrinkDay, previous: priorStatus });
         } else {
           var uk = { tea: 'drinkTea', coffee: 'drinkCoffee', bread: 'eatBread', noodles: 'eatNoodles' }[t.item.type];
           if (uk) log(uk);
         }
       }
       if (R) { R.done = t; res.k = t.kind; res.at = t.placeId; ev('done', res); }
-      if (t.placeId && D.places[t.placeId].autoRepeat && !S.over && !h.asleep && !h.task && h.at === t.placeId) {
+      if (t.placeId && D.places[t.placeId].autoRepeat && !janitorLessonActive() && !S.over && !h.asleep && !h.task && h.at === t.placeId) {
         startPlaceTask(t.placeId, t.t - t.dur, true);
       }
       return res;
@@ -1648,7 +1711,7 @@
     /* Заначка: класть и брать можно, стоя в лежбище (не во сне) */
     function stashReady() { return stashCap() > 0 && S.hero.at === 'den' && !S.hero.asleep && !S.over; }
     function stashPut(id) {
-      if (S.over || S.begging.dialog || stashCap() <= 0) return false;
+      if (S.over || inConversation() || stashCap() <= 0) return false;
       if (S.hero.asleep) { log('cantUseAsleep'); return false; }
       if (S.hero.at !== 'den') { log('stashFar'); return false; }
       var idx = invIndex(id);
@@ -1662,7 +1725,7 @@
       return true;
     }
     function stashTake(id) {
-      if (S.over || S.begging.dialog) return false;
+      if (S.over || inConversation()) return false;
       if (S.hero.asleep) { log('cantUseAsleep'); return false; }
       if (S.hero.at !== 'den') { log('stashFar'); return false; }
       var idx = -1;
@@ -1686,6 +1749,118 @@
         progress: nx ? G.next.split('{name}').join(nx.def.name.toLowerCase()).split('{need}').join(denNeedText(nx)) : G.done,
         ready: !!(nx && nx.ok)
       };
+    }
+    // В учебном дворе время движет только шаги и работу героя.
+    function janitorTarget() {
+      if (!S.janitor) return null;
+      switch (S.janitor.stage) {
+        case 'bin': return 'bin';
+        case 'den': return 'den';
+        case 'return': return 'bench';
+        default: return null;
+      }
+    }
+    function janitorLessonActive() {
+      return !!S.janitor && (S.janitor.stage === 'report' || janitorTarget() !== null);
+    }
+    function janitorStage(stage) {
+      S.janitor.stage = stage;
+      ev('janitorStage', { stage: stage, searches: S.janitor.searches });
+    }
+    function janitorGoal() {
+      var stage = S.janitor.stage, story = D.startCard.janitor;
+      var searches = stage === 'bin';
+      var ready = stage === 'debt' && invType('vodka') >= 0;
+      var goal = ready ? 'deliver' : stage === 'report' ? 'return' : stage;
+      return { id: 'janitor-' + stage, title: story.name, text: story.goal[goal],
+        done: searches ? S.janitor.searches : 0, total: searches ? D.den.janitorLesson.finds.length : 0,
+        progress: '', ready: ready };
+    }
+    function startJanitorLesson() {
+      if (S.janitor || S.over || S.total !== 0) return false;
+      S.janitor = { stage: 'bin', searches: 0, spoiledScrapsId: null };
+      Object.assign(S.hero, standPoint({ kind: 'place', id: 'bench' }), D.den.janitorLesson.afterDrink);
+      S.hero.at = 'bench';
+      var prior = dependenceStatus();
+      S.lastDrinkDay = dayNo();
+      S.tele.vodka++;
+      ev('dailyDrink', { day: S.lastDrinkDay, previous: prior, source: 'janitor' });
+      janitorStage('bin');
+      if (R) snap('janitor');
+      return true;
+    }
+    function finishJanitorLesson() {
+      if (!S.janitor || S.janitor.stage !== 'report') return false;
+      janitorStage('debt');
+      S.janitor.smokeStart = S.total;
+      S.janitor.firstDay = calDay();
+      var neighbor = D.den.janitorLesson.firstNeighbor;
+      spawnWalker(neighbor.kind, neighbor.route);
+      return true;
+    }
+    function janitorWalking(from, to, t) {
+      return { x: from.x + (to.x - from.x) * t, y: from.y + (to.y - from.y) * t,
+        pose: 'walk', dir: to.x < from.x ? -1 : 1 };
+    }
+    function janitorView() {
+      var j = S.janitor;
+      if (!j) return null;
+      var shift = D.den.janitorLesson.shift, spot = shift.smokeSpot, stops = shift.stops;
+      if (janitorLessonActive() || calDay() === j.firstDay) {
+        var minutes = (S.total - j.smokeStart) * 60 / HOUR;
+        if (janitorLessonActive() || minutes < shift.smokeMinutes) return { x: spot.x, y: spot.y, pose: 'smoke', dir: -1 };
+        var t = (minutes - shift.smokeMinutes) / shift.homeWalkMinutes;
+        return t < 1 ? janitorWalking(spot, stops[0], t) : null;
+      }
+      var hour = clockHour();
+      if (hour < shift.startHour || hour >= shift.endHour) return null;
+      var elapsed = (hour - shift.startHour) * 60;
+      for (var i = 1; i < stops.length; i++) {
+        var from = stops[i - 1], to = stops[i];
+        if (elapsed < to.at) return janitorWalking(from, to, (elapsed - from.leave) / (to.at - from.leave));
+        if (elapsed < to.leave) return { x: to.x, y: to.y, pose: to.pose, dir: to.x < from.x ? -1 : 1 };
+      }
+      return null;
+    }
+    function nearJanitor(person) {
+      var h = S.hero;
+      return !!person && dist(h.x,h.y,person.x,person.y) <= D.hero.walk.reach && canWalk(h.x,h.y,person.x,person.y);
+    }
+    function inConversation() {
+      return S.begging.dialog || (S.janitor && S.janitor.talking);
+    }
+    function openJanitorTalk() {
+      if (inConversation() || !nearJanitor(janitorView())) return false;
+      var h = S.hero;
+      heroLeavePlace();
+      h.move = null; h.walking = false;
+      S.moveDir = { x: 0, y: 0 };
+      S.moveHold = true;
+      S.janitor.talking = true;
+      ev('janitorTalk', { stage: S.janitor.stage, x: r3(h.x), y: r3(h.y) });
+      return true;
+    }
+    function closeJanitorTalk() {
+      if (!S.janitor || !S.janitor.talking) return false;
+      S.janitor.talking = false;
+      return true;
+    }
+    function payJanitor() {
+      if (!S.janitor || S.janitor.stage !== 'debt' || !S.janitor.talking || S.over ||
+          !nearJanitor(janitorView()) || S.hero.asleep || S.hero.task || S.begging.dialog) return false;
+      var idx = invType('vodka');
+      if (idx < 0) return false;
+      S.inv.splice(idx, 1);
+      janitorStage('paid');
+      return true;
+    }
+    function updateJanitorLesson(dt) {
+      if (S.janitor.stage === 'report') return;
+      moveHero(dt);
+      var t = S.hero.task;
+      if (!t) return;
+      t.t += dt / taskSlowdown();
+      if (t.t >= t.dur) finishHeroTask();
     }
     /* ---------- пакет ---------- */
     function fireInReach() {
@@ -1728,7 +1903,7 @@
     }
     /* Снять надетое (клик по слоту): уходит в пакет, а если места нет — к ногам */
     function unwear(slot) {
-      if (S.over || S.begging.dialog) return false;
+      if (S.over || inConversation()) return false;
       var w = S.worn[slot];
       if (!w) return false;
       if (S.hero.asleep) { log('cantUseAsleep'); return false; }
@@ -1745,7 +1920,7 @@
     /* Клик по предмету в пакете: еда/питьё — употребить; одежда — надеть; спички — костёр у ног (нужно топливо: картон или газета);
        газета — сначала прочитать (прогноз), прочитанная и картон — подкинуть в костёр, если герой рядом с ним. */
     function useInv(id) {
-      if (S.over || S.begging.dialog) return false;
+      if (S.over || inConversation() || janitorLessonActive()) return false;
       var idx = invIndex(id);
       if (idx < 0) return false;
       var it = S.inv[idx], def = D.items[it.type];
@@ -1796,7 +1971,7 @@
     }
     /* Вытащить предмет из пакета: ложится у ног героя. */
     function dropFromInv(id) {
-      if (S.over || S.begging.dialog) return false;
+      if (S.over || inConversation() || janitorLessonActive()) return false;
       var idx = invIndex(id);
       if (idx < 0) return false;
       var it = S.inv.splice(idx, 1)[0];
@@ -1809,7 +1984,7 @@
     /* Покупка там, где открыто меню: ларёк (еда, спички, пакет с ручками) или палатка (одежда — сразу надевается) */
     function buy(type) {
       var pid = S.hero.at, K = D.places[pid], g = null, def = D.items[type];
-      if (S.over || S.begging.dialog || !S.menuOpen || S.hero.asleep || !K || !K.goods || placeClosed(pid)) return false;
+      if (S.over || inConversation() || !S.menuOpen || S.hero.asleep || !K || !K.goods || placeClosed(pid)) return false;
       for (var i = 0; i < K.goods.length; i++) if (K.goods[i].type === type) g = K.goods[i];
       if (!g) return false;
       if (def.once && S.bagHandles) return false;          // пакет с ручками берут один раз
@@ -2167,7 +2342,7 @@
     /* Строка в лог при пересечении порога вниз. Зовёт только интерфейс; свой выбор шутки (не rng ядра), поэтому исходы забегов не меняются. */
     function noteWarnings() {
       var W = D.ui.warn, lo = warnLow(), k, it, v, arr;
-      if (!W.on || !W.log.on || !S || S.over) return;
+      if (!W.on || !W.log.on || !S || S.over || janitorLessonActive()) return;
       if (!S.warnSeen) S.warnSeen = {};
       for (k in W.items) {
         it = W.items[k];
@@ -2418,13 +2593,14 @@
 
     /* ---------- главный шаг ---------- */
     function update(dt) {
-      if (S.over || S.begging.dialog) return;
+      if (S.over || inConversation()) return;
       if (dt > D.speed.maxSubstep && S.hero.task && S.hero.task.kind === 'talk') {
         advance(dt / S.speed);
         return;
       }
       recTrack();
-      update1(dt);
+      if (janitorLessonActive()) updateJanitorLesson(dt);
+      else update1(dt);
       recTrack();
     }
     function update1(dt) {
@@ -2440,6 +2616,10 @@
           return;
         }
         startPhase();
+        if (S.phase % 2 === 0 && dependenceStatus() === 'withdrawal') {
+          appendLogLine(D.hero.dependence.missed);
+          ev('missedDrink', { day: dayNo() - 1 });
+        }
       }
       S.rhT += dt;
       if (rhythmAt(clockHour()).id !== S.rh) startRhythm(false);
@@ -2471,7 +2651,7 @@
     /* Реальное время -> игровое с учётом скорости; подшаги не длиннее maxSubstep. */
     function advance(realDt) {
       var left = realDt, guard = 0;
-      while (left > 1e-9 && !S.over && !S.begging.dialog && guard++ < 100000) {
+      while (left > 1e-9 && !S.over && !inConversation() && guard++ < 100000) {
         var sp = S.speed;
         var step = Math.min(D.speed.maxSubstep, left * sp);
         update(step);
@@ -2482,7 +2662,7 @@
     function reset() {
       nextId = 1;
       S = {
-        phase: 0, phaseTime: 0, total: 0, over: null, money: 0,
+        phase: 0, phaseTime: 0, total: 0, over: null, money: 0, lastDrinkDay: 0,
         hero: {
           x: D.hero.startPos.x, y: D.hero.startPos.y,
           satiety: D.hero.start.satiety, warmth: D.hero.start.warmth, health: D.hero.start.health,
@@ -2539,6 +2719,12 @@
     function loadState(sv, stored) {
       if (!sv || sv.kind !== 'bomzh-save' || sv.build !== D.build || sv.formatVersion !== D.save.formatVersion) return false;
       S = copy(sv.S); S.sfx = [];
+      // До введения расписания Семёнов оставался у лавки. Тогда урок заканчивался в первые сутки в 6:30.
+      if (S.janitor && (S.janitor.stage === 'debt' || S.janitor.stage === 'paid') && S.janitor.firstDay === undefined) {
+        S.janitor.firstDay = 1;
+        S.janitor.smokeStart = 0;
+      }
+      if (S.lastDrinkDay === undefined) S.lastDrinkDay = dayNo() - 1;
       if (!S.begging) S.begging = { xp: S.stats.asks * D.begging.xpPerAsk, dialog: null };
       if (!S.tele.begCards) S.tele.begCards = {};
       if (S.begging.socialXp === undefined) {
@@ -2686,6 +2872,9 @@
       update: update,
       advance: advance,
       denNext: denNext, denNeedText: denNeedText, denPreview: denPreview, denDone: denDone,   // правка 022: лежбище и заначка
+      startJanitorLesson: startJanitorLesson, finishJanitorLesson: finishJanitorLesson, payJanitor: payJanitor,
+      janitorLessonActive: janitorLessonActive, janitorTarget: janitorTarget,
+      janitorView: janitorView, closeJanitorTalk: closeJanitorTalk,
       stashPut: stashPut, stashTake: stashTake, stashReady: stashReady, stashCap: stashCap,
       setSpeed: setSpeed,
       toggleSleep: toggleSleep,
@@ -2713,6 +2902,7 @@
       bars: bars,
       isNight: isNight,
       dayNo: dayNo,
+      dependenceStatus: dependenceStatus,
       clockHour: clockHour,
       calDay: calDay,
       fmtHour: fmtHour,
@@ -2795,6 +2985,8 @@
     elStash.id = 'stash'; elField.appendChild(elStash);
     var goalsSig = null;
     var elStart = $('start-screen');
+    var arrivalScene = $('arrival-scene'), storyLines = null, storyIndex = 0, afterStory = null;
+    var storyPosition = arrivalScene.querySelector('.intercom-position');
     var started = false;       // пока открыта стартовая карточка, время не идёт
     var elMoney = $('money-value');
     var elPauseBtn = $('pause-btn');
@@ -3275,6 +3467,8 @@
     function render() {
       var S = game.state, id, i, el, key, seen;
       var night = game.isNight();
+      updateJanitorScene();
+      elField.toggleAttribute('data-lesson', game.janitorLessonActive());
 
       /* HUD */
       renderStat(stats.satiety, S.hero.satiety);
@@ -3286,6 +3480,11 @@
         speedBtnEls[i].classList.toggle('active', !paused && D.speed.options[i] === S.speed);
       }
       elMoney.textContent = String(S.money);
+      var dependence = game.dependenceStatus(), badge = $('dependence-status');
+      if (badge.dataset.status !== dependence) {
+        badge.dataset.status = dependence;
+        badge.textContent = D.hero.dependence.labels[dependence];
+      }
       renderClock();
       renderGoals();
       renderStash();
@@ -3294,6 +3493,7 @@
       /* места */
       for (id in placeEls) {
         el = placeEls[id];
+        el.classList.toggle('lesson-target', game.janitorTarget() === id);
         place(el, D.places[id].x, D.places[id].y);
         var closed = game.placeClosed(id);
         el.classList.toggle('closed', closed);
@@ -3329,12 +3529,14 @@
       heroEl.classList.toggle('talking', !!partner);
       heroEl.classList.toggle('busy', !!S.hero.task);
       heroEl.classList.toggle('asleep', !!S.hero.asleep);
+      heroEl.classList.toggle('sitting', S.hero.at === 'bench' && !S.hero.asleep && !S.hero.walking && !S.hero.move);
       heroEl.classList.toggle('walking', !!S.hero.walking);      // по этим классам art.css рисует шаг и поворот
       heroEl.classList.toggle('face-left', S.hero.dir < 0);
       var heroLabel = S.hero.asleep ? D.hero.sleepName : D.hero.name, mv = S.hero.move, Wk = D.hero.walk;
       if (mv) {
         var goName = '';
         if (mv.target && mv.target.kind === 'place') goName = D.places[mv.target.id].name;
+        else if (mv.target && mv.target.kind === 'janitor') goName = D.startCard.janitor.name;
         else if (mv.target && mv.target.kind === 'npc') goName = mv.target.name || D.npcs[mv.target.type].name;
         else if (mv.target && mv.target.kind === 'item') { var gi = game.findItem(mv.target.id); goName = gi ? D.items[gi.type].name : ''; }
         heroLabel = goName ? Wk.labelGo.split('{name}').join(goName) : Wk.labelGoPoint;
@@ -3353,7 +3555,10 @@
       }
       /* что рядом: подсветка и подсказка клавиши действия */
       var nb = game.nearby(), nbEl = null;
-      if (nb) nbEl = nb.kind === 'place' ? placeEls[nb.id] : tileEls[nb.kind + nb.id];
+      if (nb) {
+        if (nb.kind === 'janitor') nbEl = $('janitor-actor');
+        else nbEl = nb.kind === 'place' ? placeEls[nb.id] : tileEls[nb.kind + nb.id];
+      }
       if (nearEl !== nbEl) { if (nearEl) nearEl.classList.remove('near'); nearEl = nbEl || null; if (nearEl) nearEl.classList.add('near'); }
       if (!elActHint) { elActHint = document.createElement('div'); elActHint.className = 'act-hint hidden'; elActHint.id = 'act-hint'; elBars.appendChild(elActHint); }
       elActHint.classList.toggle('hidden', !nbEl);
@@ -3361,8 +3566,13 @@
         var hintText = Wk.actionKey + ' — ' + nb.label;
         if (elActHint.textContent !== hintText) elActHint.textContent = hintText;
         elActHint.classList.toggle('for-place', nb.kind === 'place');
-        elActHint.style.left = nbEl.style.left;
-        elActHint.style.top = Math.min(parseFloat(nbEl.style.top), S.hero.y * game.field.h - 18) + 'px';
+        if (nb.kind === 'janitor') {
+          var partnerPosition = game.janitorView();
+          if (partnerPosition) place(elActHint, partnerPosition.x, Math.min(partnerPosition.y, S.hero.y - 18 / game.field.h));
+        } else {
+          elActHint.style.left = nbEl.style.left;
+          elActHint.style.top = Math.min(parseFloat(nbEl.style.top), S.hero.y * game.field.h - 18) + 'px';
+        }
       }
 
       /* предметы и встречные */
@@ -3598,7 +3808,9 @@
 
     /* ---------- строка задач (data.js: goals) ---------- */
     function renderGoals() {
-      var list = game.goals(), sig = list.map(function (q) { return q.id + ':' + q.done + ':' + q.progress + ':' + (q.ready ? 1 : 0); }).join(',');
+      var lesson = game.state.janitor;
+      var list = game.goals(), sig = list.map(function (q) { return q.id + ':' + q.text + ':' + q.done + ':' + q.progress + ':' + (q.ready ? 1 : 0); }).join(',');
+      if (lesson) sig += '|' + lesson.stage + '|' + lesson.searches;
       if (sig === goalsSig) return;
       goalsSig = sig;
       elGoals.innerHTML = '';
@@ -3617,6 +3829,86 @@
         row.appendChild(title); row.appendChild(text); row.appendChild(pips); row.appendChild(prog);
         elGoals.appendChild(row);
       });
+      if (lesson && lesson.searches && (lesson.stage === 'bin' || lesson.stage === 'den')) {
+        var found = document.createElement('div');
+        found.className = 'lesson-find';
+        found.textContent = D.startCard.janitor.found[lesson.searches - 1];
+        elGoals.appendChild(found);
+      }
+    }
+
+    function positionJanitorTalk() {
+      var j = game && game.state.janitor;
+      if (!storyLines || !j || !j.talking) return;
+      var partner = game.janitorView();
+      if (!partner) return;
+      var yard = elField.getBoundingClientRect(), scene = arrivalScene.getBoundingClientRect();
+      var x = yard.left - scene.left + partner.x * yard.width;
+      var y = yard.top - scene.top + partner.y * yard.height;
+      var half = storyPosition.offsetWidth / 2;
+      storyPosition.style.left = Math.max(half, Math.min(x, scene.width - half)) + 'px';
+      storyPosition.style.top = Math.max(0, Math.min(y + 12, scene.height - storyPosition.offsetHeight - 8)) + 'px';
+    }
+    global.addEventListener('resize', positionJanitorTalk);
+    function paintStoryLine() {
+      var line = storyLines[storyIndex];
+      if (line.cue && global.BomzhSound) global.BomzhSound.storyCue(line.cue);
+      elField.classList.toggle('janitor-offers-drink', line.gesture === 'offerDrink');
+      $('intercom-speaker').textContent = line.speaker;
+      $('intercom-text').textContent = line.text;
+      $('intercom-next').textContent = line.action;
+      positionJanitorTalk();
+    }
+    function startStory(lines, finished, byBench) {
+      storyLines = lines;
+      storyIndex = 0;
+      afterStory = finished;
+      arrivalScene.classList.toggle('by-bench', byBench);
+      arrivalScene.classList.remove('hidden');
+      $('arrival-address').textContent = game.state.janitor && game.state.janitor.talking
+        ? D.startCard.janitor.name : byBench ? D.startCard.janitor.meetTitle : D.startCard.arrivalLabel;
+      $('arrival-skip').hidden = started;
+      $('intercom-ring').hidden = true;
+      $('intercom-dialog').hidden = false;
+      paintStoryLine();
+      requestAnimationFrame(function () { if (storyLines === lines) $('intercom-next').focus(); });
+    }
+    function closeStory() {
+      storyLines = afterStory = null;
+      $('bench-thought').hidden = true;
+      elField.classList.remove('janitor-offers-drink');
+      arrivalScene.classList.add('hidden');
+      arrivalScene.classList.remove('by-bench');
+      $('intercom-dialog').hidden = true;
+      $('janitor-decline').hidden = true;
+      storyPosition.style.removeProperty('left');
+      storyPosition.style.removeProperty('top');
+      requestAnimationFrame(function () { elField.focus({ preventScroll: true }); });
+    }
+    function closeJanitorDialogue() {
+      game.closeJanitorTalk();
+      closeStory();
+    }
+    function updateJanitorScene() {
+      var s = game.state, j = s.janitor, copy = D.startCard.janitor;
+      if (global.BomzhArt && global.BomzhArt.setJanitor) global.BomzhArt.setJanitor(game.janitorView());
+      if (!j) { delete elField.dataset.janitorStage; return; }
+      if (elField.dataset.janitorStage !== j.stage) elField.dataset.janitorStage = j.stage;
+      if (!started || storyLines || !arrivalScene.classList.contains('hidden') || s.over || slotMode || gameMenuOpen || !elEnd.classList.contains('hidden')) return;
+      if (j.stage === 'report') {
+        keysDown = {};
+        startStory(copy.report, function () { game.finishJanitorLesson(); closeStory(); }, true);
+      } else if (j.talking) {
+        keysDown = {};
+        var canGive = j.stage === 'debt' && s.inv.some(function (it) { return it.type === 'vodka'; });
+        if (canGive) {
+          $('janitor-decline').hidden = false;
+          startStory(copy.offer, function () {
+            $('janitor-decline').hidden = true;
+            startStory(game.payJanitor() ? copy.paid : copy.waiting, closeJanitorDialogue, true);
+          }, true);
+        } else startStory(j.stage === 'paid' ? copy.greeting : copy.waiting, closeJanitorDialogue, true);
+      }
     }
 
     /* ---------- стартовая карточка ---------- */
@@ -3633,11 +3925,91 @@
       $('continue-btn').textContent = C.continueBtn;
       $('continue-btn').classList.remove('hidden');
       $('continue-btn').addEventListener('click', function () { openSlots('load', this); });
-      $('start-btn').addEventListener('click', function () {
-        if (started) return;
+      var sceneIndex = 0;
+      var ring = $('intercom-ring');
+      var intercom = $('intercom-dialog');
+      function showScene() {
+        var scene = C.prologue[sceneIndex];
+        $('prologue-title').textContent = scene.title;
+        $('prologue-text').replaceChildren();
+        scene.lines.forEach(function (line) {
+          var p = document.createElement('p');
+          p.textContent = line;
+          $('prologue-text').appendChild(p);
+        });
+        $('prologue-next').textContent = scene.action;
+        $('prologue-title').focus();
+      }
+      function startArrival() {
+        $('prologue').hidden = true;
+        elStart.classList.add('hidden');
+        arrivalScene.classList.remove('hidden');
+        arrivalScene.classList.remove('by-bench');
+        $('arrival-address').textContent = C.arrivalLabel;
+        $('arrival-skip').hidden = false;
+        ring.hidden = true;
+        intercom.hidden = true;
+        requestAnimationFrame(function () {
+          if (!started) $('arrival-address').focus();
+        });
+        global.BomzhArrival.play(function () {
+          ring.hidden = false;
+          ring.focus();
+        });
+      }
+      function sitOnBench() {
+        storyLines = afterStory = null;
+        arrivalScene.classList.add('by-bench');
+        $('arrival-address').textContent = C.janitor.meetTitle;
+        intercom.hidden = true;
+        var thought = $('bench-thought');
+        global.BomzhArrival.meetJanitor(function () {
+          thought.hidden = true;
+          startStory(C.janitor.meet, enterYard, true);
+        }, function (beat) {
+          thought.hidden = !beat;
+          thought.textContent = beat ? C.janitor.thoughts[beat] : '';
+        });
+      }
+      function enterYard() {
+        global.BomzhArrival.stop();
+        game.startJanitorLesson();
+        closeStory();
         started = true;
         elStart.classList.add('hidden');
+        $('prologue').hidden = true;
+        $('start-card').hidden = false;
         flushRec();
+      }
+      $('arrival-address').textContent = C.arrivalLabel;
+      ring.textContent = C.ringIntercom;
+      ring.addEventListener('click', function () {
+        if (global.BomzhSound) global.BomzhSound.storyCue('ring');
+        startStory(C.intercom, sitOnBench, false);
+      });
+      $('intercom-next').addEventListener('click', function () {
+        if (!storyLines) return;
+        storyIndex++;
+        if (storyIndex === storyLines.length) afterStory();
+        else paintStoryLine();
+      });
+      $('janitor-decline').textContent = C.janitor.leave;
+      $('janitor-decline').addEventListener('click', closeJanitorDialogue);
+      $('arrival-skip').textContent = C.skipPrologue;
+      $('arrival-skip').addEventListener('click', enterYard);
+      $('prologue-skip').textContent = C.skipPrologue;
+      $('prologue-skip').addEventListener('click', enterYard);
+      $('prologue-next').addEventListener('click', function () {
+        sceneIndex++;
+        if (sceneIndex === C.prologue.length) startArrival();
+        else showScene();
+      });
+      $('start-btn').addEventListener('click', function () {
+        if (started) return;
+        sceneIndex = 0;
+        $('start-card').hidden = true;
+        $('prologue').hidden = false;
+        showScene();
       });
     }
 
@@ -3680,6 +4052,10 @@
       tip = null;
       if (invDrag || !game || game.state.over || e.pointerType === 'touch') return;
       var t = e.target, el = t && t.closest ? t.closest('.inv-item') || directTile(t, e.clientX, e.clientY) : null;
+      if (t && t.closest && t.closest('#janitor-actor')) {
+        tip = { kind: 'janitor', x: e.clientX, y: e.clientY };
+        return;
+      }
       if (t && t.closest && t.closest('#clock')) { tip = { kind: 'clock', id: 0, x: e.clientX, y: e.clientY }; return; }
       var wr = elWeather.getBoundingClientRect();           // плашка погоды мышь не ловит (pointer-events), поэтому по прямоугольнику
       if (e.clientX >= wr.left && e.clientX <= wr.right && e.clientY >= wr.top && e.clientY <= wr.bottom) { tip = { kind: 'weather', id: 0, x: e.clientX, y: e.clientY }; return; }
@@ -3708,7 +4084,9 @@
     }
     function renderTip() {
       if (!tip || invDrag || game.state.over) { hideTip(); return; }
-      var d = game.describe(tip.kind, tip.id);
+      var d = tip.kind === 'janitor'
+        ? game.janitorView() && { title: D.startCard.janitor.name, lines: [D.den.janitorLesson.talkAction] }
+        : game.describe(tip.kind, tip.id);
       if (!d) { hideTip(); return; }
       var sig = d.title + '\n' + d.lines.join('\n');
       if (sig !== tipSig) {
@@ -3976,7 +4354,24 @@
     elField.addEventListener('click', function (e) {
       if (!game || game.state.over || !started || invDrag) return;      // на паузе клик принимается: приказ выполнится, когда пауза снимется
       var t = e.target;
+      if (t.closest('#janitor-actor')) {
+        var j = game.state.janitor;
+        if (j && (j.stage === 'return' || j.stage === 'debt' || j.stage === 'paid')) {
+          game.order(j.stage === 'return' ? { kind: 'place', id: 'bench' } : { kind: 'janitor', id: 'janitor' });
+          render();
+        }
+        return;
+      }
       if (t.closest && t.closest('.sleep-btn, #shop-menu, #stash')) return;
+      if (game.janitorLessonActive()) {
+        var target = game.janitorTarget();
+        var box = target && placeEls[target].getBoundingClientRect();
+        if (box && e.clientX >= box.left && e.clientX <= box.right && e.clientY >= box.top && e.clientY <= box.bottom && !game.state.hero.task) {
+          game.order({ kind: 'place', id: target });
+          render();
+        }
+        return;
+      }
       if (game.state.menuOpen) { game.closeMenu(); render(); return; }  // клик мимо открытого меню — только закрыть его, бомж стоит где стоял
       var el = directTile(t, e.clientX, e.clientY);
       /* Прямой клик по предмету или менту — как раньше. Всё остальное сначала отдаём зоне прохожего: ближайший к курсору. */
@@ -4079,7 +4474,8 @@
       elPauseBtn.blur();
     });
     document.addEventListener('keydown', function (e) {
-      if (gameMenuOpen || slotMode || !started || game.state.over || document.querySelector('dialog[open]')) return;
+      if (gameMenuOpen || slotMode || !started || storyLines || game.state.over || document.querySelector('dialog[open]')) return;
+      if (e.target.closest && e.target.closest('#janitor-actor') && (e.key === 'Enter' || e.key === ' ')) return;
       if (e.code === 'Space' || e.key === ' ') {
         e.preventDefault();
         if (!e.repeat && !game.state.over) setPaused(!paused, 'key');
@@ -4092,7 +4488,12 @@
         if (!keysDown[e.code]) { keysDown[e.code] = true; applyMoveKeys(); }
         return;
       }
-      if (e.code === 'KeyE' && !e.repeat) { e.preventDefault(); game.act(); render(); return; }      // E и русская У — одна клавиша
+      if (e.code === 'KeyE' && !e.repeat) {
+        e.preventDefault();
+        game.act();
+        render();
+        return;
+      }
       if (e.code === 'KeyZ' && !e.repeat) { e.preventDefault(); game.toggleSleep(); render(); return; }   // Z и русская Я
       var m = /^(?:Digit|Numpad)([1-9])$/.exec(e.code || '');
       var idx = m ? parseInt(m[1], 10) - 1 : -1;
@@ -4117,7 +4518,7 @@
     }
     global.addEventListener('blur', function () { if (game && started) game.recEvent('blur', { hidden: document.hidden ? 1 : 0 }); keysDown = {}; if (game) game.setMoveDir(0, 0); awayPause(); flushRec(); });
     document.addEventListener('visibilitychange', function () { if (document.hidden) { if (game && started) game.recEvent('blur', { hidden: 1 }); keysDown = {}; if (game) game.setMoveDir(0, 0); awayPause(); persistOnExit(); } });
-    elRestart.addEventListener('click', function () { newGame(); });
+    elRestart.addEventListener('click', function () { newGame(); game.startJanitorLesson(); render(); });
     global.addEventListener('resize', function () { fieldSize(); render(); });
 
     var RD = D.record, RK = RD.keys;
@@ -4192,7 +4593,7 @@
       return { save: sv };
     }
     function writeSave() {
-      if (!D.save.on || !started || !game || game.state.over || game.state.total <= 0 || slotMode === 'load') return;
+      if (!D.save.on || !started || !game || game.state.over || (game.state.total <= 0 && !game.state.janitor) || slotMode === 'load') return;
       var state = JSON.stringify(Object.assign({}, game.state, { sfx: [] }));
       if (state === store.lastAutoState) return;
       var sv = game.saveState();
@@ -4362,7 +4763,10 @@
       var dt = lastTs ? (ts - lastTs) / 1000 : 0;
       lastTs = ts;
       if (dt > D.ui.maxFrameDt) dt = D.ui.maxFrameDt;
-      if (started && !paused && !game.state.over && !game.state.begging.dialog && dialogueResult.hidden && dt > 0) { game.advance(dt); game.noteWarnings(); }
+      if (started && !paused && !storyLines && !game.state.over && !game.state.begging.dialog && dialogueResult.hidden && dt > 0) {
+        game.advance(dt);
+        if (!game.janitorLessonActive()) game.noteWarnings();
+      }
       if (started && game.state.phase !== store.lastPhase) {
         store.lastPhase = game.state.phase;
         if (game.state.phase % 2 === 0 && !game.state.over) writeSave();
@@ -4374,7 +4778,7 @@
         var hasFire = false;
         for (var fi = 0; fi < SS.items.length; fi++) if (SS.items[fi].type === 'fire') hasFire = true;
         global.BomzhSound.frame({
-          paused: paused || !started || !!SS.begging.dialog || !dialogueResult.hidden, speed: SS.speed, night: game.isNight(),
+          paused: paused || !started || !!storyLines || !!SS.begging.dialog || !dialogueResult.hidden, speed: SS.speed, night: game.isNight(),
           wind: SS.weather.wind, precip: SS.weather.precip, type: SS.weather.type,
           bus: SS.bus, listenerX: SS.hero.x, listenerY: SS.hero.y,
           walking: SS.hero.walking, walkSpeed: game.walkSpeed(), at: SS.hero.at,

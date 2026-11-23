@@ -1,4 +1,60 @@
 /* Зимний двор на главном экране. */
+#prologue {
+  box-sizing: border-box;
+  width: min(36rem, calc(100% - 2rem));
+  margin: auto clamp(1rem, 6vw, 6rem);
+  padding: clamp(1.25rem, 3vw, 2.5rem);
+  background: #182126f2;
+  border-left: 3px solid #ccab7c;
+  text-align: left;
+  font: clamp(1rem, 1.4vw, 1.2rem)/1.48 Georgia, serif;
+}
+#prologue-title { margin: 0; color: #efd4ad; font: bold 1.65em/1.1 Georgia, serif; }
+#prologue-next, #prologue-skip { cursor: pointer; font: inherit; }
+#prologue-next { padding: .45em .8em; color: #271f18; background: #ebbc82; border: 0; }
+#prologue-skip { padding: .45em; color: #d6d0c6; background: transparent; border: 0; font-size: .85em; text-decoration: underline; }
+#arrival-scene {
+  position: absolute; inset: 0; z-index: 81;
+  background: linear-gradient(to bottom, #10192366, transparent 17%, transparent 83%, #10192333);
+  color: #f1ece3; font: clamp(1rem, 1.55vw, 1.18rem)/1.45 Georgia, serif;
+}
+#game:has(#arrival-scene:not(.hidden)) :is(#hud, #bottom-bar, #tooltip) { visibility: hidden; }
+.arrival-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: .6rem; padding: clamp(.6rem, 2.2vw, 2rem); }
+#arrival-address { margin: 0; padding: .3em .7em; background: #283842; border: 2px solid #ddd9c8; border-radius: 4px; color: #f7f3e8; font: 600 clamp(1rem, 2.2vw, 1.55rem)/1.2 Georgia, serif; box-shadow: 0 2px 6px #0006; }
+#arrival-skip { padding: .45em .7em; background: #192126df; border: 0; color: #f1ece3; cursor: pointer; font: .85em/1.2 system-ui, sans-serif; }
+.intercom-position { position: absolute; top: 34%; left: 46%; transform: translateX(-50%); width: min(27rem, 90%); text-align: center; }
+#intercom-dialog, #intercom-ring { position: relative; background: #202c30fa; border: 1px solid #bdad8f; border-radius: 4px; box-shadow: 0 5px 20px #10151d60; }
+#intercom-dialog::before, #intercom-ring::before { content: ''; position: absolute; left: 50%; top: -7px; width: 12px; height: 12px; transform: translateX(-50%) rotate(45deg); border: solid #bdad8f; border-width: 1px 0 0 1px; background: #202c30; }
+#intercom-ring { padding: .65em 1em; color: #ffdeb1; font: inherit; cursor: pointer; }
+#intercom-dialog { padding: 1em 1.2em; text-align: left; }
+#intercom-speaker { color: #ebbf83; font: 600 .88em/1.3 system-ui, sans-serif; }
+#intercom-text { margin: .4em 0 .85em; }
+#intercom-next { padding: .4em .8em; background: #ebbc82; border: 0; border-radius: 2px; color: #241f18; font: inherit; cursor: pointer; }
+.by-bench .intercom-position { top: 46%; left: 54%; }
+#bench-thought {
+  position: absolute; inset: auto 0 9%; margin: auto;
+  width: fit-content; max-width: min(36rem, calc(100% - 3rem));
+  padding: .65em 1em; border-radius: 3px; background: #172028e8;
+  color: #f4e8d8; text-align: center; text-wrap: balance;
+  font: italic clamp(1rem, 1.7vw, 1.3rem)/1.45 Georgia, serif;
+  pointer-events: none;
+}
+#janitor-decline { padding: .45em .65em; font: inherit; background: transparent; color: #f1e4d1; border: 0; cursor: pointer; text-decoration: underline; }
+.lesson-find { padding-top: 3px; color: #422c1c; font-weight: 500; white-space: normal; }
+#field[data-janitor-stage="bin"] .place-bin .place-label,
+#field[data-janitor-stage="den"] .place-den .place-label {
+  color: #fff0c4; outline: 2px solid #ffd68d; outline-offset: 2px;
+}
+@media (max-width: 640px) {
+  .by-bench .intercom-position { left: 50%; width: 94%; }
+  .lesson-find { max-width: 26em; }
+}
+@media (max-height: 460px) {
+  #intercom-dialog { max-height: 62dvh; overflow-y: auto; box-sizing: border-box; }
+}
+@media (max-height: 570px) {
+  #prologue { max-height: calc(100dvh - 2rem); overflow-y: auto; }
+}
 #start-screen {
   --paper: #efe7d8;
   --lamplight: #ffc27b;
@@ -233,6 +289,9 @@
 #hud #game-menu-btn { order: 0; position: static; }
 #weather { flex: 0 1 24rem; }
 .hud-agenda, .hud-controls { display: flex; align-items: center; gap: 6px; padding: 3px 6px; }
+#sound-panel { position: relative; }
+#sound-vol { position: absolute; right: 0; top: 100%; }
+#sound-panel:hover #sound-vol, #sound-panel:focus-within #sound-vol { background: #273139; }
 #clock-dial { width: 30px; height: 30px; }
 #clock { gap: 4px; }
 #goals { transform: none; margin: 0; padding: 2px 8px; color: #27221c; background: #c4b498; font: 600 12px/1.2 "Segoe UI", sans-serif; }
@@ -242,6 +301,9 @@
 #bottom-bar > * { padding: 5px 9px; align-self: auto; }
 #vitals { position: relative; grid-template-columns: auto auto; gap: 3px 10px; font-size: 12px; }
 #money { grid-column: 1; }
+#dependence-status { grid-column: 1 / -1; font: 600 12px/1.25 "Segoe UI", sans-serif; color: #f0cea1; }
+#dependence-status[data-status="withdrawal"] { color: #ffb5a3; }
+#dependence-status[data-status="covered"] { color: #c7cebc; }
 #events { justify-self: end; align-self: center; }
 #events summary { cursor: pointer; font-size: 11px; color: #d0d8dc; }
 #events #log { position: absolute; bottom: calc(100% + 5px); left: 0; width: min(330px, 90vw); min-width: 0; padding: 9px; max-height: 32vh; overflow-y: auto; display: block; pointer-events: auto; transform: none; font: 12px/1.4 "Segoe UI", sans-serif; }
@@ -261,9 +323,6 @@
   .hud-agenda { margin-inline: auto; }
   #weather { flex: 0 1 auto; }
   #weather-caption { display: none; }
-  #sound-vol { position: absolute; right: 0; top: 100%; }
-  #sound-panel { position: relative; }
-  #sound-panel:hover #sound-vol, #sound-panel:focus-within #sound-vol { background: #273139; }
   #vitals { gap: 2px 6px; }
   .stat-track { width: 32px; }
   #warmth-rate { min-width: 0; }
@@ -313,3 +372,10 @@
 }
 #game:has(.painted-courtyard)::after { background: rgb(5 9 20 / var(--facade-night, 0)); }
 #field { top: var(--cornice); }
+@media (max-width: 740px) {
+  #field[data-lesson] ~ #hud { grid-template-columns: auto minmax(0, 1fr); align-items: start; }
+  #field[data-lesson] ~ #hud :is(#weather, #clock, .hud-controls) { display: none; }
+  #field[data-lesson] ~ #hud .hud-agenda { grid-column: 2; grid-row: 1; justify-self: stretch; min-width: 0; }
+  #field[data-lesson] ~ #hud #goals { width: 100%; box-sizing: border-box; }
+  #field[data-lesson] .place:not(.lesson-target) :is(.place-label,.place-sub) { visibility: hidden; }
+}

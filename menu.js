@@ -20,7 +20,7 @@
   document.getElementById('menu-info-close').addEventListener('click', function () { dialog.close(); });
 
   // Слоты могут открываться из игры, со старта и после проигрыша.
-  var layers = ['save-modal', 'game-menu-modal', 'end-screen', 'start-screen'].map(function (id) {
+  var layers = ['save-modal', 'game-menu-modal', 'end-screen', 'arrival-scene', 'start-screen'].map(function (id) {
     return document.getElementById(id);
   });
   function syncLayers() {

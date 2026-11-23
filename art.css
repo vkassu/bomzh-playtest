@@ -563,6 +563,62 @@ body { background: #0b0f14; }
   display: block; width: 100%; height: 100%; font-size: 60px; line-height: 1; text-align: center;
   background: center / contain no-repeat;
 }
+/* На время приезда игровые подписи и настоящий герой уступают место сцене. */
+#field[data-arrival] :is(.tile.hero:not(.arrival-hero), .place-label, .place-sub, .tile-label, #layer-bars),
+#field[data-arrival] #layer-tiles > .bus:not(.arrival-bus) { visibility: hidden; }
+#field[data-arrival] .arrival-bus { z-index: 46; }
+#field[data-arrival] .arrival-hero { pointer-events: none; }
+#janitor-actor {
+  display: none; position: absolute; z-index: 13; transform: translate(-46%, -95%);
+  height: 13.3%; width: auto; aspect-ratio: 160 / 166; box-sizing: border-box;
+  margin: 0; padding: 0; border: 0; background: transparent; opacity: 1;
+  color: inherit; pointer-events: none; appearance: none;
+}
+#field:is([data-arrival="janitor"], [data-janitor-stage="bin"], [data-janitor-stage="den"], [data-janitor-stage="return"], [data-janitor-stage="report"], [data-janitor-stage="debt"], [data-janitor-stage="paid"]) #janitor-actor { display: block; }
+#janitor-actor:enabled { pointer-events: auto; cursor: pointer; }
+#field #janitor-actor[hidden] { display: none; }
+.painted-courtyard #janitor-actor { z-index: calc(var(--ground-depth, 0) + 3); }
+#janitor-actor:focus-visible { outline: 2px solid #f2c780; outline-offset: 2px; border-radius: 5px; }
+/* В атласе Семёнова по три фазы движения в каждом горизонтальном ряду. */
+#janitor-actor::before {
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: url("semenov-poses.webp") 0 var(--janitor-row, 75%) / 300% 500% no-repeat;
+  transform-origin: 46% 95%;
+  animation: janitor-frames var(--janitor-period, 3.6s) step-end infinite;
+}
+#janitor-actor[data-facing="left"]::before { transform: scaleX(-1); }
+#janitor-actor[data-pose="walk"] { --janitor-row: 0%; --janitor-period: .9s; }
+#janitor-actor[data-pose="sweep"] { --janitor-row: 25%; --janitor-period: 1.4s; }
+#janitor-actor[data-pose="scatter"] { --janitor-row: 50%; --janitor-period: 1.6s; }
+#janitor-actor[data-pose="smoke"] { --janitor-row: 75%; --janitor-period: 4.2s; }
+#janitor-actor[data-pose="offer"] { --janitor-row: 100%; }
+#janitor-actor[data-pose="offer"]::before { animation: janitor-offers .8s step-end both; }
+@keyframes janitor-frames {
+  0%, 100% { background-position-x: 0%; }
+  25%, 75% { background-position-x: 50%; }
+  50% { background-position-x: 100%; }
+}
+@keyframes janitor-offers {
+  0% { background-position-x: 0%; }
+  40% { background-position-x: 50%; }
+  75%, 100% { background-position-x: 100%; }
+}
+#game:has(#pause-btn.active) #janitor-actor::before { animation-play-state: paused; }
+#field .tile.hero.sitting:not(.asleep) .tile-emoji { visibility: hidden; }
+#field .tile.hero.sitting:not(.asleep)::before {
+  content: ""; position: absolute; left: 50%; bottom: 0;
+  transform: translateX(calc(-38% + var(--bench-tremor, 0px)));
+  height: calc(var(--hero-height, 70px) * .79); aspect-ratio: 184 / 134; pointer-events: none;
+  background: url("hero-bench.webp") var(--bench-col, 0%) center / 300% 100% no-repeat;
+}
+#field[data-arrival="janitor"] { --janitor-zoom: 1.95; transform-origin: 57% 27%; transform: scale(var(--janitor-zoom)); animation: janitor-closeup 1.3s ease-out; }
+@media (max-aspect-ratio: 3/4) { #field[data-arrival="janitor"] { --janitor-zoom: 1.55; } }
+@keyframes janitor-closeup { from { transform: scale(1); } to { transform: scale(var(--janitor-zoom)); } }
+@media (prefers-reduced-motion: reduce) {
+  #field[data-arrival="janitor"], #janitor-actor[data-pose]::before { animation: none; }
+  #janitor-actor[data-pose]::before { background-position-x: 50%; }
+  #janitor-actor[data-pose="offer"]::before { background-position-x: 100%; }
+}
 #road-traffic {
   position: absolute; pointer-events: none; z-index: 43;
   width: auto; height: min(10.8%, 4.7vw); aspect-ratio: 600 / 215;
@@ -897,3 +953,22 @@ body { background: #0b0f14; }
   --facade-filter: sepia(.22) saturate(1.09) brightness(.85);
 }
 .painted-courtyard :is(#art-bg, #art-posts, .furniture-front) { filter: var(--facade-filter, none); }
+
+/* Первое утро. Холодный рассеянный свет внизу двора и низкий свет из проезда справа.
+   Обе маски лежат поверх персонажей и транспорта, под игровыми панелями. */
+#field::before, #field::after {
+  content: ''; position: absolute; inset: 0; z-index: 17; pointer-events: none;
+  opacity: 0; transition: opacity 8s ease-out;
+}
+#field::before {
+  background: linear-gradient(25deg, rgba(65,81,156,.38), rgba(143,126,173,.14) 57%, transparent 82%);
+}
+#field::after {
+  background: linear-gradient(243deg, #ffce9b 0%, #ffbca7 19%, rgba(247,161,172,.48) 45%, transparent 75%);
+  mix-blend-mode: soft-light;
+}
+#field:is([data-arrival], [data-lesson])::before,
+#field:is([data-arrival], [data-lesson])::after { opacity: 1; transition-duration: .35s; }
+#game:has(#field:is([data-arrival], [data-lesson])) {
+  --facade-filter: sepia(.14) saturate(.95) brightness(1.05);
+}

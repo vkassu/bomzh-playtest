@@ -8,7 +8,7 @@
   var AC = global.AudioContext || global.webkitAudioContext;
   function noop() {}
   var api = {
-    available: !!(AC && CFG), unlock: noop, frame: noop, resetScene: noop, setEnabled: noop, setVolume: noop,
+    available: !!(AC && CFG), unlock: noop, frame: noop, resetScene: noop, storyCue: noop, setEnabled: noop, setVolume: noop,
     debug: function () { return { available: false }; }, renderOffline: null
   };
   global.BomzhSound = api;
@@ -137,6 +137,20 @@
         burst({ freq: 2400, q: 3, dur: 0.4, peak: 0.05, attack: 0.02 });
       },
       beeps: function () { [[1040, 0, 0.09], [1040, 0.15, 0.09], [830, 0.3, 0.16]].forEach(function (b) { tone({ freq: b[0], type: 'square', lowpass: 2800, dur: b[2], peak: 0.06, at: b[1] }); }); },
+      ring: function () {
+        [0, 0.19].forEach(function (at) {
+          tone({ freq: 425, type: 'square', lowpass: 1350, dur: .14, peak: .1, at: at,
+            vibrato: { rate: 16, depth: 12 } });
+        });
+      },
+      hangup: function () {
+        burst({ type: 'highpass', freq: 1800, dur: .019, peak: .28, attack: .001 });
+        tone({ freq: 430, slideTo: 145, type: 'triangle', dur: .055, peak: .18, at: .019 });
+      },
+      sweep: function () { burst({ freq: 1900, slideTo: 680, dur: .36, peak: .36, attack: .07 }); },
+      grit: function () {
+        for (var n = 0; n < 5; n++) burst({ type: 'highpass', freq: rnd(1200, 3400), dur: .04, peak: .15, at: n * .043 });
+      },
       chimeDay: function () { tone({ freq: 523.25, dur: 0.7, peak: 0.1 }); tone({ freq: 783.99, dur: 0.9, peak: 0.1, at: 0.22 }); tone({ freq: 1046.5, type: 'triangle', dur: 0.5, peak: 0.03, at: 0.22 }); },
       chimeNight: function () { tone({ freq: 392, dur: 0.8, peak: 0.1 }); tone({ freq: 261.63, dur: 1.1, peak: 0.11, at: 0.26 }); },
       sleep: function () { tone({ freq: 440, slideTo: 392, dur: 0.5, peak: 0.07, attack: 0.08 }); tone({ freq: 330, slideTo: 294, dur: 0.8, peak: 0.07, attack: 0.1, at: 0.3 }); },
@@ -431,6 +445,7 @@
   }
 
   var ctx = null, engine = null, busAudio = null, courtyardAudio = null, lastT = 0, lastSnap = null;
+  var story = { active: false, busArrivals: 0, doorsOpened: 0, doorsClosed: 0, steps: 0 };
   var prefs = { on: CFG.enabledByDefault, vol: CFG.volume };
   try {
     var saved = JSON.parse(global.localStorage.getItem(CFG.storageKey) || 'null');
@@ -477,9 +492,24 @@
     if (busAudio) busAudio.reset();
     if (courtyardAudio) courtyardAudio.reset();
   };
+  api.storyCue = function (key) {
+    if ((key === 'ring' || key === 'hangup') && story.active && engine && ctx.state === 'running' && level() && on('events')) {
+      engine.play(key);
+    }
+  };
   api.setEnabled = function (v) { prefs.on = !!v; save(); applyLevel(); syncUi(); if (prefs.on && engine && on('ui')) engine.play('tick'); };
   api.setVolume = function (v) { prefs.vol = Math.max(0, Math.min(1, v)); if (prefs.vol > 0 && !prefs.on) prefs.on = true; save(); applyLevel(); syncUi(); };
   api.frame = function (snap, events) {
+    var arrival = global.BomzhArrival;
+    var scene = arrival && arrival.soundFrame && arrival.soundFrame();
+    if (story.active && !scene) api.resetScene();
+    story.active = !!scene;
+    if (scene) {
+      snap = Object.assign({}, snap, { paused: away(), speed: 1, night: false, bus: scene.bus,
+        at: null, walking: scene.walking, listenerX: scene.listenerX, listenerY: scene.listenerY,
+        walkSpeed: D.hero.walk.speed * D.hero.walk.heroMult, task: null, fire: false, fireNear: false, over: null });
+      events = scene.events;
+    }
     var pauseChanged = !lastSnap || lastSnap.paused !== snap.paused;
     lastSnap = snap;
     if (pauseChanged) applyLevel();
@@ -487,11 +517,22 @@
     var now = ctx.currentTime, dt = Math.min(0.1, lastT ? now - lastT : 0.016);
     lastT = now;
     var userLevel = level();
-    engine.tick(dt, snap, courtyardAudio && courtyardAudio.step, userLevel);
+    if (scene && !userLevel) return;
+    var step = courtyardAudio && courtyardAudio.step;
+    if (scene) step = function (vol, speed) {
+      story.steps++;
+      return courtyardAudio && courtyardAudio.step(vol, speed);
+    };
+    engine.tick(dt, snap, step, userLevel);
     if (courtyardAudio) courtyardAudio.frame(dt, snap, events, userLevel);
     var recordedBus = busAudio && busAudio.frame(dt, snap, events, userLevel);
     if (!snap.over) for (var i = 0; i < events.length; i++) {
       var ev = events[i];
+      if (scene && on('events')) {
+        if (ev.key === 'busCome') story.busArrivals++;
+        if (ev.key === 'busDoorsOpen') story.doorsOpened++;
+        if (ev.key === 'busGo') story.doorsClosed++;
+      }
       if (recordedBus && (ev.key === 'busCome' || ev.key === 'busGo')) continue;
       engine.event(ev, false);
     }
@@ -501,7 +542,7 @@
       available: true, created: !!ctx, state: ctx ? ctx.state : 'none', on: prefs.on, volume: prefs.vol,
       wind: engine ? { gain: +engine.cur.gain.toFixed(4), freq: Math.round(engine.cur.freq), howl: +engine.cur.howl.toFixed(4) } : null,
       indoor: engine ? !!engine.cur.indoor : false, lowpass: engine ? engine.cur.lowp : 0, ambMult: engine ? +engine.cur.ambMult.toFixed(3) : 0,
-      away: away(), userGain: engine ? +engine.user.gain.value.toFixed(3) : 0,
+      away: away(), userGain: engine ? +engine.user.gain.value.toFixed(3) : 0, story: Object.assign({}, story),
       plays: engine ? JSON.parse(JSON.stringify(engine.stats.plays)) : {}, total: engine ? engine.stats.total : 0, skipped: engine ? engine.stats.skipped : 0
     };
   };

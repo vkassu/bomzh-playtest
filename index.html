@@ -4,15 +4,15 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <title>Бомж v0.1</title>
-<link rel="stylesheet" href="style.css?v=040">
-<link rel="stylesheet" href="art.css?v=040">
-<link rel="stylesheet" href="menu.css?v=040">
-<link rel="stylesheet" href="kiosk.css?v=040">
+<link rel="stylesheet" href="style.css?v=040&amp;rev=011780652cd3">
+<link rel="stylesheet" href="art.css?v=040&amp;rev=011780652cd3">
+<link rel="stylesheet" href="menu.css?v=040&amp;rev=011780652cd3">
+<link rel="stylesheet" href="kiosk.css?v=040&amp;rev=011780652cd3">
 </head>
 <body>
 <div id="game">
 
-  <div id="field">
+  <div id="field" tabindex="-1">
     <div id="layer-places"></div>
     <div id="layer-tiles"></div>
     <div id="layer-bars"></div>
@@ -85,6 +85,7 @@
         <span class="stat-value" id="stat-energy-value">0</span>
       </div>
       <div id="money"><span id="money-icon">💰</span><span id="money-value">0</span> ₽</div>
+      <div id="dependence-status" role="status"></div>
       <details id="events"><summary>Журнал</summary><div id="log"></div></details>
     </div>
     <div id="gear">
@@ -117,6 +118,24 @@
     </div>
   </dialog>
 
+  <section id="arrival-scene" class="hidden" aria-labelledby="arrival-address">
+    <div class="arrival-heading">
+      <h2 id="arrival-address" tabindex="-1"></h2>
+      <button id="arrival-skip" type="button"></button>
+    </div>
+    <p id="bench-thought" aria-live="polite" aria-atomic="true" hidden></p>
+    <div class="intercom-position">
+      <button id="intercom-ring" type="button" hidden></button>
+      <div id="intercom-dialog" hidden>
+        <div aria-live="polite" aria-atomic="true">
+          <strong id="intercom-speaker"></strong>
+          <p id="intercom-text"></p>
+        </div>
+        <button id="intercom-next" type="button"></button>
+        <button id="janitor-decline" type="button" hidden></button>
+      </div>
+    </div>
+  </section>
   <div id="start-screen" aria-labelledby="start-title" role="region">
     <div id="start-card">
       <h1 id="start-title">Бомж</h1>
@@ -131,6 +150,12 @@
         <button id="menu-help-btn" type="button">Как играть</button>
       </div>
     </div>
+    <section id="prologue" hidden aria-labelledby="prologue-title">
+      <h2 id="prologue-title" tabindex="-1"></h2>
+      <div id="prologue-text"></div>
+      <button id="prologue-next" type="button"></button>
+      <button id="prologue-skip" type="button"></button>
+    </section>
     <dialog id="menu-info-dialog" aria-labelledby="menu-info-title">
       <h2 id="menu-info-title"></h2>
       <section id="menu-help" hidden>
@@ -179,10 +204,10 @@
   </div>
 
 </div>
-<script src="data.js?v=040"></script>
-<script src="game.js?v=040"></script>
-<script src="sound.js?v=040"></script>
-<script src="art.js?v=040"></script>
-<script src="menu.js?v=040"></script>
+<script src="data.js?v=040&amp;rev=011780652cd3"></script>
+<script src="game.js?v=040&amp;rev=011780652cd3"></script>
+<script src="sound.js?v=040&amp;rev=011780652cd3"></script>
+<script src="art.js?v=040&amp;rev=011780652cd3"></script>
+<script src="menu.js?v=040&amp;rev=011780652cd3"></script>
 </body>
 </html>

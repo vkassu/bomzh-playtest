@@ -673,6 +673,7 @@
       gait.movedAt = now;
     }
     if (!hero && el.classList.contains('at-counter')) gait.facing = 'back';
+    if (el.dataset.look) gait.facing = el.dataset.look;
     gait.x = x; gait.y = y;
     var frame = walking && now - gait.movedAt < 120 ? 1 + Math.floor(gait.phase * 4) : 0;
     if (el.dataset.gaitPaused === 'true') frame = Number(el.dataset.gaitFrame || 0);
@@ -696,6 +697,229 @@
     }
   }
   var postMask = null, postLayer = null, tiles = null;
+  var arrival = null;
+  var janitorActor;
+  var janitorView = null;
+  var janitorDrawn = {};
+  var seatAt = { x: .578, y: .300 };
+  var janitorAt = window.GAME_DATA.den.janitorLesson.shift.smokeSpot;
+
+  function makeJanitor() {
+    var actor = document.createElement('button');
+    actor.type = 'button';
+    actor.id = 'janitor-actor';
+    actor.setAttribute('aria-label', 'Поговорить с дворником');
+    return actor;
+  }
+
+  function positionJanitor(x, y, pose, onRoute) {
+    // Перспектива и рост масштабируются по высоте, дорожка — по ширине.
+    // На портретном экране оставляем между героями место для метлы.
+    var room = H && W ? H / W * .075 : 0;
+    janitorActor.style.left = (onRoute ? x : Math.min(x, seatAt.x - room)) * W + 'px';
+    janitorActor.style.top = y * H + 'px';
+    janitorActor.style.height = onRoute ? (13.3 + Math.max(0, y - seatAt.y) * 8) + '%' : '';
+    janitorActor.dataset.pose = pose;
+  }
+  function updateJanitorActor() {
+    var stage = field.dataset.janitorStage;
+    if (janitorActor.parentNode !== tiles) tiles.appendChild(janitorActor);
+    if (arrival) {
+      if (!janitorDrawn.arrival) {
+        janitorActor.hidden = false;
+        janitorActor.disabled = true;
+        janitorActor.dataset.facing = 'right';
+        janitorDrawn = { arrival: true };
+      }
+      return;
+    }
+    var workingDay = stage === 'debt' || stage === 'paid';
+    var actor = workingDay ? janitorView : janitorAt;
+    if (stage === janitorDrawn.stage && W === janitorDrawn.w && H === janitorDrawn.h &&
+        (!actor ? !janitorDrawn.actor : janitorDrawn.actor && actor.x === janitorDrawn.actor.x &&
+          actor.y === janitorDrawn.actor.y && actor.pose === janitorDrawn.actor.pose && actor.dir === janitorDrawn.actor.dir)) return;
+    janitorDrawn = { stage: stage, w: W, h: H, actor: actor };
+    janitorActor.hidden = !stage || (workingDay && !janitorView);
+    janitorActor.disabled = janitorActor.hidden || !(workingDay || stage === 'return');
+    if (janitorActor.hidden) return;
+    positionJanitor(actor.x, actor.y, actor.pose || 'smoke', workingDay);
+    janitorActor.dataset.facing = actor.dir < 0 ? 'left' : 'right';
+  }
+
+  function meetJanitor(onReady, onThought) {
+    if (!arrival) playArrival(null);
+    arrival.meeting = true;
+    arrival.elapsed = 0;
+    arrival.lastNow = performance.now();
+    arrival.cueIndex = 0;
+    arrival.sound.bus = null;
+    arrival.sound.events.length = 0;
+    arrival.onAtDoor = null;
+    arrival.onMeeting = onReady;
+    arrival.onThought = onThought;
+    arrival.thought = null;
+    arrival.bus.style.visibility = 'hidden';
+    updateArrival(arrival.lastNow);
+  }
+
+  var busCues = [[0, 'busCome'], [3.8, 'busDoorsOpen'], [7.2, 'busGo']];
+  var meetingCues = [[17, 'entranceDoorOpen'], [18.6, 'entranceDoorClose'], [20.5, 'janitorSweep'], [21.8, 'janitorGrit']];
+  function queueCues(a, seconds, cues) {
+    while (a.cueIndex < cues.length && seconds >= cues[a.cueIndex][0]) {
+      a.sound.events.push({ key: cues[a.cueIndex++][1] });
+    }
+  }
+  function arrivalSoundFrame() {
+    if (!arrival) return null;
+    var sound = arrival.sound;
+    return { bus: sound.bus, walking: sound.walking, listenerX: sound.listenerX, listenerY: sound.listenerY,
+      events: document.hidden ? [] : sound.events.splice(0) };
+  }
+  function setThought(a, thought) {
+    if (a.thought === thought) return;
+    a.thought = thought;
+    if (a.onThought) a.onThought(thought);
+  }
+  function updateMeeting(a, elapsed) {
+    var t = elapsed;
+    if (a.stills) {
+      // Оставляем обеим мыслям почти по пять секунд. Сокращаем только переходы.
+      if (elapsed < 1.5) t = elapsed * 5 / 1.5;
+      else if (elapsed < 12.2) t = 5 + (elapsed - 1.5) * 12 / 10.7;
+      else t = 17 + (elapsed - 12.2) * 6.5 / 2.8;
+    }
+    queueCues(a, t, meetingCues);
+    field.dataset.arrival = 'janitor';
+    var door = window.GAME_DATA.hero.startPos;
+    var walking = Math.min(1, t / 5);
+    if (a.stills) walking = walking < .45 ? 0 : walking < 1 ? .65 : 1;
+    // Сначала спускается на дорожку, затем проходит перед лавкой.
+    var corner = Math.min(1, walking * 3);
+    var along = Math.max(0, (walking - 1 / 3) * 1.5);
+    a.sound.listenerX = door.x + (seatAt.x - door.x) * along;
+    a.sound.listenerY = door.y + (seatAt.y - door.y) * corner;
+    a.sound.walking = t < 5;
+    a.hero.style.left = a.sound.listenerX * W + 'px';
+    a.hero.style.top = a.sound.listenerY * H + 'px';
+    a.hero.style.visibility = '';
+    a.hero.classList.toggle('walking', walking < 1 && !a.stills);
+    a.hero.classList.toggle('sitting', walking === 1);
+    a.hero.dataset.look = walking === 1 || corner < 1 ? 'front' : 'right';
+    setThought(a, t < 5.7 || t >= 16.8 ? null : t < 11 ? 'seat' : 'night');
+    // Сначала садится, затем тянется вправо, проводит рукой по доске и убирает руку.
+    var benchFrame = t < 6.4 || t >= 10.2 ? '0%' : t < 8.1 ? '50%' : '100%';
+    a.hero.style.setProperty('--bench-col', benchFrame);
+    var tremor = t > 11 && t < 17 && !a.stills ? Math.sin(t * 31) * (.5 + .5 * Math.sin(t * 4)) * 1.1 : 0;
+    a.hero.style.setProperty('--bench-tremor', tremor.toFixed(2) + 'px');
+    var emerges = Math.min(1, Math.max(0, (t - 17) / 3));
+    if (a.stills) emerges = emerges < .5 ? 0 : 1;
+    janitorActor.style.visibility = t < 17 ? 'hidden' : '';
+    var pose = t < 20 ? 'walk' : t < 21.8 ? 'sweep' : t < 23.5 ? 'scatter' : 'smoke';
+    a.doorOpen = t >= 17 && t < 18.6;
+    var offering = field.classList.contains('janitor-offers-drink');
+    positionJanitor(door.x + (janitorAt.x - door.x) * emerges,
+      door.y + (janitorAt.y - door.y) * emerges, offering ? 'offer' : pose);
+    if (t >= 23.5 && a.onMeeting) {
+      var callback = a.onMeeting;
+      a.onMeeting = null;
+      callback();
+    }
+  }
+
+  function stopArrival() {
+    if (!arrival) return;
+    setThought(arrival, null);
+    arrival.bus.remove();
+    arrival.hero.remove();
+    delete field.dataset.arrival;
+    arrival = null;
+    janitorActor.style.visibility = '';
+    updateJanitorActor();
+    lastStep = null;
+  }
+
+  function playArrival(onAtDoor) {
+    stopArrival();
+    var bus = document.createElement('div'), hero = document.createElement('div');
+    bus.className = 'bus arrival-bus';
+    bus.innerHTML = '<span class="bus-body"></span>';
+    hero.className = 'tile hero arrival-hero';
+    hero.innerHTML = '<span class="tile-emoji"></span>';
+    bus.setAttribute('aria-hidden', 'true');
+    hero.setAttribute('aria-hidden', 'true');
+    tiles.append(bus, hero);
+    var data = window.GAME_DATA, busData = data.walkers.bus;
+    var doorRoute = data.walkers.busExits.find(function (route) { return route.id === 'exitDoor'; }).path;
+    // С дальней стороны автобуса — на тротуар, в обход левого торца павильона.
+    var curb = { x: doorRoute[1].x, y: busData.stop.y };
+    arrival = { bus: bus, hero: hero, elapsed: 0, lastNow: performance.now(), onAtDoor: onAtDoor,
+      cueIndex: 0, sound: { bus: null, listenerX: curb.x, listenerY: curb.y, walking: false, events: [] },
+      route: [{ x: curb.x + .018, y: busData.boardY }, curb, doorRoute[1], doorRoute[2], data.hero.startPos],
+      stills: window.matchMedia('(prefers-reduced-motion: reduce)').matches };
+    lastStep = null;
+    updateArrival(arrival.lastNow);
+  }
+
+  function updateArrival(now) {
+    var a = arrival, cfg = window.GAME_DATA.walkers.bus;
+    if (document.hidden) return;
+    a.elapsed += Math.max(0, Math.min(.25, (now - a.lastNow) / 1000));
+    a.lastNow = now;
+    if (a.meeting) { updateMeeting(a, a.elapsed); return; }
+    var seconds = a.stills ? a.elapsed * 20 / 7 : a.elapsed;
+    queueCues(a, seconds, busCues);
+    var visibleTime = seconds;
+    if (a.stills) {
+      var stops = [1.6, 3.8, 5.3, 6.6, 7.2, 8.5, 10.6, 13.4, 17.2, 20];
+      visibleTime = stops[0];
+      for (var i = 1; i < stops.length && stops[i] <= seconds; i++) visibleTime = stops[i];
+    }
+    var approach = Math.max(0, 1 - visibleTime / 3.8);
+    var leave = Math.min(1, Math.max(0, (visibleTime - 7.2) / 3));
+    var busX = cfg.stop.x + (cfg.startX - cfg.stop.x) * approach * approach +
+      (cfg.endX - cfg.stop.x) * leave * leave;
+    a.bus.style.left = busX * W + 'px';
+    a.bus.style.top = cfg.y * H + 'px';
+    a.bus.style.visibility = leave >= 1 ? 'hidden' : '';
+    a.sound.bus = leave >= 1 ? null : { x: busX, state: seconds < 3.8 ? 'in' : seconds < 7.2 ? 'stop' : 'out' };
+
+    var route = a.route;
+    var phase = 'bus', from = route[0], to = from, t = 0, look = '';
+    if (visibleTime >= 20) {
+      phase = 'door'; from = to = route[route.length - 1]; look = 'back';
+    } else if (visibleTime >= 10.6) {
+      phase = 'walk';
+      // Три отрезка идут вокруг павильона и торговой палатки к двери подъезда.
+      var segment = visibleTime < 12.25 ? 1 : visibleTime < 17.2 ? 2 : 3;
+      var times = [0, 10.6, 12.25, 17.2, 20];
+      from = route[segment]; to = route[segment + 1];
+      t = (visibleTime - times[segment]) / (times[segment + 1] - times[segment]);
+    } else if (visibleTime >= 6.6) {
+      phase = 'look'; from = to = route[1];
+      look = visibleTime < 7.8 ? 'left' : visibleTime < 9.35 ? 'right' : 'back';
+    } else if (visibleTime >= 4.6) {
+      phase = 'exit'; to = route[1]; t = (visibleTime - 4.6) / 2;
+    }
+    a.sound.listenerX = from.x + (to.x - from.x) * t;
+    a.sound.listenerY = from.y + (to.y - from.y) * t;
+    a.sound.walking = phase === 'exit' || phase === 'walk';
+    a.hero.style.left = a.sound.listenerX * W + 'px';
+    a.hero.style.top = a.sound.listenerY * H + 'px';
+    a.hero.style.visibility = phase === 'bus' ? 'hidden' : '';
+    a.hero.dataset.look = look;
+    a.hero.classList.toggle('walking', a.sound.walking && !a.stills);
+    field.dataset.arrival = phase;
+    if (phase === 'door' && a.onAtDoor) {
+      var callback = a.onAtDoor;
+      a.onAtDoor = null;
+      callback();
+    }
+  }
+
+  function visibleHero() {
+    if (arrival) return field.dataset.arrival === 'bus' ? null : arrival.hero;
+    return document.querySelector('.tile.hero');
+  }
   var closedShopArt = null;
   var openDoorArt = null, doorWasOpen = null;
   var benchPatch = { x: 920, y: 110, image: null,
@@ -713,7 +937,7 @@
   function paintEntrance(force) {
     if (!courtyard || !openDoorArt) return;
     var entrance = document.getElementById('place-entrance');
-    var open = !!entrance && entrance.classList.contains('door-open');
+    var open = (!!entrance && entrance.classList.contains('door-open')) || !!(arrival && arrival.doorOpen);
     if (!force && open === doorWasOpen) return;
     doorWasOpen = open;
     var x = doorPatch.x * W / courtyard.width, y = doorPatch.y * H / courtyard.height;
@@ -1410,6 +1634,8 @@
     lastT = t; tNow += dt;
     if (field.clientWidth !== W || field.clientHeight !== H) resize();
     if (!W) return;
+    updateJanitorActor();
+    if (arrival) updateArrival(t);
     paintShopFronts(false);
     paintEntrance(false);
     if (postLayer) {
@@ -1418,7 +1644,7 @@
         foreground.forEach(function (cutout) { tiles.appendChild(cutout.canvas); });
       }
       for (var child = tiles.firstElementChild; child; child = child.nextElementSibling) {
-        if (!child.classList.contains('tile') && !child.classList.contains('bus')) continue;
+        if (child !== janitorActor && !child.classList.contains('tile') && !child.classList.contains('bus')) continue;
         var x = parseFloat(child.style.left) / W;
         var post = x < 0.5 ? streetLamps[0] : streetLamps[1];
         var shop = x < 0.5 ? kioskFront : recycleFront;
@@ -1436,7 +1662,8 @@
     var precip = weatherEl && weatherEl.dataset.precip ? weatherEl.dataset.precip : 'snow';
     var clear = weatherEl && weatherEl.dataset.type === 'calm';
     if (wind !== lastWind) { lastWind = wind; document.body.style.setProperty('--lean', FLAME_LEAN[wind]); }
-    dark += ((night ? (clear ? CLEAR_NIGHT : NIGHT) : 0) - dark) * Math.min(1, dt * 0.5);
+    var dawnLesson = arrival || ['bin', 'den', 'return', 'report'].includes(field.dataset.janitorStage);
+    dark += ((night ? (clear ? CLEAR_NIGHT : NIGHT) : dawnLesson ? .17 : 0) - dark) * Math.min(1, dt * 0.5);
     var bandDark = dark.toFixed(2);
     if (bandDark !== lastBandDark) {
       field.parentElement.style.setProperty('--facade-night', bandDark);
@@ -1477,7 +1704,7 @@
     el = document.getElementById('place-stall');
     if (el) { p = centerOf(el, fr); lights.push({ x: p.x, y: p.y, r: 124, a: 0.45, w: 0 }); }
     /* герой виден всегда; предметы и встречные на земле различимы */
-    var heroEl = document.querySelector('.tile.hero');
+    var heroEl = visibleHero();
     animateWindowCat(heroEl, t);
     drawActorGait(heroEl, t, true);
     var people = tiles.querySelectorAll('.walker:not(.gone), .npc-cop:not(.gone)');
@@ -1491,7 +1718,7 @@
     }
     el = document.getElementById('bus-stop');
     if (el) { p = centerOf(el, fr); lights.push({ x: p.x, y: p.y + 4, r: 122, a: 0.74, w: 0.07 }); }
-    el = document.getElementById('bus');
+    el = arrival ? (arrival.bus.style.visibility === 'hidden' ? null : arrival.bus) : document.getElementById('bus');
     if (el) {                               // автобус: салон виден, фары светят вперёд
       p = centerOf(el, fr);
       lights.push({ x: p.x, y: p.y, r: 150, a: 0.8, w: 0.03 });
@@ -1618,7 +1845,7 @@
     drawVentSteam(wind, k);
     if (!courtyard && Math.random() < dt * 3) puffs.push({ x: W * 0.57 - 10 + Math.random() * 20, y: H * 0.71 - 4, vx: 8 + Math.random() * 6, vy: -12 - Math.random() * 8, t: 0, max: 2 + Math.random(), r0: 4, r1: 18, a: 0.12 });
     breathT -= dt;
-    var hero = document.querySelector('.tile.hero');
+    var hero = visibleHero();
     var warmEl = document.getElementById('stat-warmth-value');
     if (hero && warmEl && breathT <= 0) {
       var warmth = parseInt(warmEl.textContent, 10);
@@ -1686,6 +1913,9 @@
     field = document.getElementById('field');
     if (!field) return;
     tiles = document.getElementById('layer-tiles');
+    janitorActor = makeJanitor();
+    positionJanitor(janitorAt.x, janitorAt.y, 'smoke');
+    janitorActor.disabled = true;
     var blocks = window.GAME_DATA.navigation.blocks;
     foregroundOccluders.forEach(function (part) {
       var id = part.shop ? part.shop.id : part.block || 'busStop';
@@ -1697,7 +1927,12 @@
         part.depthRight = box.right + side;
       }
     });
-    window.BomzhArt = { foregroundCoversPoint: foregroundCoversPoint };
+    window.BomzhArt = { foregroundCoversPoint: foregroundCoversPoint,
+      setJanitor: function (view) { janitorView = view; } };
+    window.BomzhArrival = { play: playArrival, meetJanitor: meetJanitor, stop: stopArrival, soundFrame: arrivalSoundFrame };
+    document.addEventListener('visibilitychange', function () {
+      if (arrival) arrival.lastNow = performance.now();
+    });
     buildSpriteCss();
     bg = document.createElement('canvas'); bg.id = 'art-bg'; bg.className = 'art-layer';
     fx = document.createElement('canvas'); fx.id = 'art-fx'; fx.className = 'art-layer';
