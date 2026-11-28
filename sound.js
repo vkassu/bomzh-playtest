@@ -596,7 +596,7 @@
     /* щелчки интерфейса и клик-приказ — очень тихо */
     document.addEventListener('click', function (e) {
       if (!engine || !on('ui') || !e.target.closest) return;
-      if (e.target.closest('.speed-btn, #pause-btn, .shop-btn, #start-btn, #restart-btn, .sleep-btn, .inv-item')) engine.play('tick');
+      if (e.target.closest('.speed-btn, #pause-btn, .shop-btn, #start-btn, #restart-btn, #shelter-actions button, .inv-item')) engine.play('tick');
       else if (e.target.closest('#field') && !(lastSnap && lastSnap.paused)) engine.play('order');
     }, true);
   }

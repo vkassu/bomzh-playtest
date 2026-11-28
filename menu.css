@@ -170,7 +170,11 @@
   border: 1px solid #7c796e; border-radius: 4px; color: #eee8da; background: #252e30;
   box-shadow: 0 12px 55px #080c10aa; font: clamp(15px,1.05vw,18px)/1.35 "Trebuchet MS", "Segoe UI", sans-serif;
 }
-#dialogue-panel::backdrop { background: rgba(11,17,21,.61); }
+#dialogue-panel[open] { display: flex; flex-direction: column; overflow: hidden; }
+#dialogue-panel .dialogue-body { overflow-y: auto; }
+#dialogue-farewell { flex: none; padding: 8px 14px 12px; border-top: 1px solid #59615d; }
+#dialogue-panel:has(#dialogue-result:not([hidden])) #dialogue-farewell { display: none; }
+#dialogue-panel::backdrop { background: rgba(11,17,21,.30); }
 .dialogue-head {
   display: flex; align-items: center; gap: 1rem; padding: 12px 18px 0;
   border-bottom: 2px solid #ad926a; background: linear-gradient(115deg,#495351,#263337);
@@ -192,19 +196,28 @@
 #dialogue-feedback { margin: 0 0 12px; padding-left: 10px; border-left: 2px solid #ad926a; font: italic 1.05em/1.4 Georgia, serif; color: #eee3c8; }
 #dialogue-feedback:empty { display: none; }
 #dialogue-cards { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 9px; margin-top: 10px; }
-#dialogue-cards button {
+:is(#dialogue-cards, #dialogue-farewell) button {
   display: block; text-align: left; padding: 12px; min-height: 76px; cursor: pointer; color: #28251c;
   background: linear-gradient(115deg,#ebdfbd,#d9c9a4); border: 1px solid #c9b38d; border-radius: 3px;
   box-shadow: inset 0 0 0 3px #fff3; font: inherit;
 }
-#dialogue-cards strong { display: block; font: bold 1.08em/1.15 Georgia, serif; }
-#dialogue-cards small { display: block; margin-top: 6px; font-size: .86em; line-height: 1.3; }
-#dialogue-cards button[data-dialogue-card="goodbye"] { background: #354044; color: #e4e6db; border-color: #788079; box-shadow: none; }
-#dialogue-cards button[data-dialogue-card="goodbye"]:hover { background: #46524e; }
+:is(#dialogue-cards, #dialogue-farewell) strong { display: block; font: bold 1.08em/1.15 Georgia, serif; }
+:is(#dialogue-cards, #dialogue-farewell) small { display: block; margin-top: 6px; font-size: .86em; line-height: 1.3; }
+#dialogue-farewell button { width: 100%; min-height: 0; overflow-wrap: anywhere; background: #354044; color: #e4e6db; border-color: #788079; box-shadow: none; }
+#dialogue-farewell button:hover:enabled { background: #46524e; }
 .dialogue-odds { display: block; margin-top: 6px; font: 700 .82em/1.2 "Trebuchet MS", sans-serif; color: #49402e; }
 #dialogue-cards button:hover:enabled { background: #f1e3bf; border-color: #fff1cf; }
-#dialogue-cards button:focus-visible { outline: 3px solid #e3a753; outline-offset: 2px; }
-#dialogue-cards button:disabled { background: #9c9c8c; color: #343931; box-shadow: none; cursor: default; }
+:is(#dialogue-cards, #dialogue-farewell) button:focus-visible { outline: 3px solid #e3a753; outline-offset: 2px; }
+:is(#dialogue-cards, #dialogue-farewell) button:disabled { background: #9c9c8c; color: #343931; box-shadow: none; cursor: default; }
+#dialogue-cards button:has(.dialogue-card-progress) { position: relative; overflow: hidden; background: #eadaba; color: #28251c; }
+.dialogue-card-progress { position: absolute; inset: auto 0 0; width: 100%; height: 5px; border: 0; appearance: none; background: #7a715d; }
+.dialogue-card-progress::-webkit-progress-bar { background: #7a715d; }
+.dialogue-card-progress::-webkit-progress-value { background: #476546; }
+.dialogue-card-progress::-moz-progress-bar { background: #476546; }
+#dialogue-resume:not([hidden]) {
+  order: 1; margin-left: auto; padding: 7px 12px; align-self: center; font: inherit;
+  background: #eadaba; color: #28251c; border: 1px solid #c9b38d; border-radius: 3px; cursor: pointer;
+}
 #dialogue-result-close {
   display: none; order: 1; align-self: flex-start; margin-left: auto;
   width: 40px; height: 40px; background: transparent; border: 0;
@@ -379,3 +392,19 @@
   #field[data-lesson] ~ #hud #goals { width: 100%; box-sizing: border-box; }
   #field[data-lesson] .place:not(.lesson-target) :is(.place-label,.place-sub) { visibility: hidden; }
 }
+
+#shelter-actions {
+  position: absolute; z-index: 38; display: grid; justify-items: center; gap: 5px;
+  box-sizing: border-box; width: min(255px, calc(100% - 8px)); padding: 6px 10px;
+  border: 1px solid #aa997c; border-radius: 6px; background: #292925; color: #f6ebd5;
+  box-shadow: 0 2px 6px #16171380; font: 14px/1.2 "Trebuchet MS", sans-serif; text-align: center;
+}
+#shelter-actions::after {
+  content: ""; position: absolute; top: 100%; left: clamp(7px, var(--pointer-x), calc(100% - 7px));
+  transform: translateX(-50%); border: 6px solid transparent; border-top-color: #aa997c;
+}
+#shelter-actions button {
+  padding: 4px 12px; border: 1px solid #d1bc92; border-radius: 3px;
+  background: #e5d3ae; color: #29271f; font: inherit; font-weight: bold; cursor: pointer;
+}
+#shelter-actions kbd { margin-left: 3px; padding: 0 3px; border: 1px solid #92846c; border-radius: 2px; }

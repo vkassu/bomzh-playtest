@@ -4,10 +4,10 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <title>Бомж v0.1</title>
-<link rel="stylesheet" href="style.css?v=040&amp;rev=011780652cd3">
-<link rel="stylesheet" href="art.css?v=040&amp;rev=011780652cd3">
-<link rel="stylesheet" href="menu.css?v=040&amp;rev=011780652cd3">
-<link rel="stylesheet" href="kiosk.css?v=040&amp;rev=011780652cd3">
+<link rel="stylesheet" href="style.css?v=040&amp;rev=eef9ee483b41">
+<link rel="stylesheet" href="art.css?v=040&amp;rev=eef9ee483b41">
+<link rel="stylesheet" href="menu.css?v=040&amp;rev=eef9ee483b41">
+<link rel="stylesheet" href="kiosk.css?v=040&amp;rev=eef9ee483b41">
 </head>
 <body>
 <div id="game">
@@ -22,6 +22,11 @@
       <div id="shop-goods"></div>
       <div class="shop-note">Esc, ✕ или клик мимо — закрыть</div>
     </div>
+  </div>
+
+  <div id="shelter-actions" class="hidden">
+    <span id="shelter-hint"></span>
+    <button type="button" id="shelter-sleep" aria-describedby="shelter-hint" aria-keyshortcuts="Z"><span></span> <kbd>Z</kbd></button>
   </div>
 
   <div id="hud">
@@ -102,6 +107,7 @@
   <dialog id="dialogue-panel" aria-labelledby="dialogue-title">
     <header class="dialogue-head">
       <div class="dialogue-portrait" aria-hidden="true"><span></span></div>
+      <button id="dialogue-resume" type="button" hidden>Продолжить</button>
       <button id="dialogue-result-close" type="button" aria-label="Закрыть итог разговора">×</button>
       <div><div id="dialogue-context"></div><h2 id="dialogue-title" tabindex="-1"></h2></div>
     </header>
@@ -116,6 +122,7 @@
         <div id="dialogue-unlocked"></div>
       </div>
     </div>
+    <div id="dialogue-farewell"></div>
   </dialog>
 
   <section id="arrival-scene" class="hidden" aria-labelledby="arrival-address">
@@ -204,10 +211,10 @@
   </div>
 
 </div>
-<script src="data.js?v=040&amp;rev=011780652cd3"></script>
-<script src="game.js?v=040&amp;rev=011780652cd3"></script>
-<script src="sound.js?v=040&amp;rev=011780652cd3"></script>
-<script src="art.js?v=040&amp;rev=011780652cd3"></script>
-<script src="menu.js?v=040&amp;rev=011780652cd3"></script>
+<script src="data.js?v=040&amp;rev=eef9ee483b41"></script>
+<script src="game.js?v=040&amp;rev=eef9ee483b41"></script>
+<script src="sound.js?v=040&amp;rev=eef9ee483b41"></script>
+<script src="art.js?v=040&amp;rev=eef9ee483b41"></script>
+<script src="menu.js?v=040&amp;rev=eef9ee483b41"></script>
 </body>
 </html>

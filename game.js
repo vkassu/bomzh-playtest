@@ -146,7 +146,7 @@
     }
     function wxSig() { var w = S.weather; return w ? w.type + '|' + w.temp + '|' + w.wind + '|' + w.precip : ''; }
     function taskInfo(t) {
-      var o = { k: t.kind, at: t.placeId, sec: r1(t.dur) };
+      var o = { k: t.kind, at: t.placeId, sec: t.dur === undefined ? undefined : r1(t.dur) };
       if (t.kind === 'talk') { var n = findNpc(t.npcId); o.id = t.npcId; o.who = who(n); }
       if (t.kind === 'use') o.it = t.item.type;
       return o;
@@ -172,7 +172,7 @@
       if (S.speed !== w.speed) { w.speed = S.speed; ev('speed', { v: S.speed, auto: 1 }); }
       if (h.task !== R.task) {
         var pt = R.task;
-        if (pt && pt !== R.done) ev('cut', { k: pt.kind, at: pt.placeId, sec: r1(pt.t), of: r1(pt.dur) });
+        if (pt && pt !== R.done) ev('cut', { k: pt.kind, at: pt.placeId, sec: pt.t === undefined ? undefined : r1(pt.t), of: pt.dur === undefined ? undefined : r1(pt.dur) });
         R.task = h.task; R.done = null;
         if (h.task) ev('task', taskInfo(h.task));
       }
@@ -597,7 +597,7 @@
           var mods = walkerMods(), ws = walkSeconds({ kind: 'npc', id: id });
           if (n.type === 'passerby') {
             var KT = T.npcs.kinds[n.kind] || { how: '', joke: '' };
-            nl = fill(T.npcs.passerby, { how: KT.how, s: plain(C.talkSeconds * slow) });
+            nl = fill(T.npcs.passerby, { how: KT.how, s: D.begging.cardSeconds });
             if (mods.give < D.walkers.badGive) nl.push(T.npcs.weatherBad);
             else if (mods.give < 1) nl.push(T.npcs.weatherMeh);
             else if (KT.joke) nl.push(KT.joke);
@@ -607,7 +607,7 @@
             else if ((n.hurry || 1) > 1.05) nl.push(T.npcs.hurry);
             else if ((n.giveF || 1) > 1.05) nl.push(T.npcs.relaxed);
           } else {
-            nl = fill(T.npcs.granny, { s: plain(C.talkSeconds * slow), m: C.money });
+            nl = fill(T.npcs.granny, { s: D.begging.cardSeconds, m: C.money });
             if (n.pose === 'sit') nl.push(T.npcs.grannySit);
           }
           if (S.gs.charisma && !n.asked && !n.spoken) nl.push(T.npcs.charisma.split('{pp}').join(signed(Math.round(S.gs.give * 100))));
@@ -809,16 +809,19 @@
       if (textKey) log(textKey);
       emit('wake');
     }
+    function sleepShelter() {
+      return S.hero.at === 'entrance' || (S.hero.at === 'den' && S.den.stage > 0);
+    }
     function toggleSleep() {
       if (S.over || inConversation() || janitorLessonActive()) return;
       var h = S.hero;
       if (h.asleep) { wake('wake'); return; }
-      if (h.at === 'pipe') { log('pipeNoSleep'); return; }
+      if (!sleepShelter()) return;
       if (h.energy >= D.hero.max) { log('notSleepy'); return; }
       cancelHeroTask();
       S.menuOpen = false;
       h.asleep = true;
-      S.tele.slAt = (!h.at || h.at === 'bench') && nearFire() ? 'fire' : (h.at || 'ground'); S.tele.slT = 0;   // засчитается в teleTick, если проспит 10 с
+      S.tele.slAt = h.at; S.tele.slT = 0;   // засчитается в teleTick, если проспит 10 с
       if (R) { R.w.sleepT = S.total; ev('sleep', { at: S.tele.slAt, en: r1(h.energy), by: inCtx.by, paused: inCtx.paused ? 1 : 0 }); }
       log('sleepStart');
     }
@@ -1026,6 +1029,7 @@
       } else if (t.kind === 'talk') {
         var n = findNpc(t.npcId);
         if (n) n.engaged = false;
+        S.begging.dialog = null;
       }
     }
     function heroLeavePlace(forced) {
@@ -1040,7 +1044,14 @@
     function startTalk(n) {
       cancelHeroTask();
       n.engaged = true;
-      S.hero.task = { kind: 'talk', npcId: n.id, t: 0, dur: D.npcs[n.type].talkSeconds };
+      n.walking = false;
+      S.moveDir = { x: 0, y: 0 };
+      S.hero.walking = false;
+      S.begging.result = null;
+      S.hero.task = { kind: 'talk', npcId: n.id };
+      S.begging.dialog = newDialogue(n);
+      ev('begOpen', { id: n.id, mood: S.begging.dialog.mood, observation: S.begging.dialog.observationIndex,
+        level: skillProgress('begging').level, xp: S.begging.xp, socialXp: S.begging.socialXp });
     }
 
     function skillProgress(skill) {
@@ -1069,11 +1080,11 @@
       var chance = base + (1 - base) * D.begging.socialReach * practice;
       return adjustOdds(chance, D.begging.moods[dialog.mood][id] * dialog.rapport);
     }
-    function newDialogue(n, step) {
+    function newDialogue(n) {
       var moods = Object.keys(D.begging.moods), roll = rng() * moods.length;
       var mood = moods[Math.floor(roll)], lines = D.encounterText.observations[who(n)][mood];
       return { npcId: n.id, used: null, question: false, lastMove: null, socialGain: 0, unlocked: [],
-        mood: mood, observationIndex: Math.floor((roll % 1) * lines.length), rapport: 1, bonus: 0, feedback: '', step: step };
+        mood: mood, observationIndex: Math.floor((roll % 1) * lines.length), rapport: 1, bonus: 0, feedback: '', pending: null };
     }
     function nextDialogueLine(id, play, dialog) {
       // Даже после вопроса о дворе просьба продолжает разговор о еде или состоявшейся помощи.
@@ -1106,12 +1117,14 @@
       var dialog = S.begging.dialog;
       if (!dialog) return null;
       var n = findNpc(dialog.npcId), cards = [];
+      if (!n) return null;
       var skills = { social: skillProgress('social'), begging: skillProgress('begging') };
       for (var id in D.begging.cards) {
         var card = D.begging.cards[id], skill = card.skill || 'begging';
         if (card.level > skills[skill].level) continue;
         var enabled = cardEnabled(id, dialog);
-        cards.push({ id: id, label: card.label, description: card.description, enabled: enabled, chance: cardChance(id, n, dialog),
+        cards.push({ id: id, label: card.label, description: card.description, enabled: enabled && !dialog.pending,
+          chance: enabled ? cardChance(id, n, dialog) : null,
           line: id === 'goodbye' ? farewellLine(dialog, who(n)).line : card.variants && enabled ? nextDialogueLine(id, false, dialog).line : D.encounterText.lines[id] || null });
       }
       var help = giveChance(n, dialog), food = n.type === 'granny' ? help * D.npcs.granny.scrapsChance : 0;
@@ -1120,7 +1133,7 @@
         feedback: dialog.feedback, exchange: dialog.exchange || null, joke: dialog.used === 'joke' ? dialog.exchange || null : null,
         unlocked: dialog.unlocked.slice(), chance: help, foodChance: food, moneyChance: help - food,
         mood: dialog.mood, observation: D.encounterText.observations[who(n)][dialog.mood][dialog.observationIndex],
-        lastOutcome: dialog.lastOutcome || null, cards: cards };
+        lastOutcome: dialog.lastOutcome || null, cards: cards, pending: dialog.pending || null };
     }
     function formatYardHint(reply) {
       var places = D.places, kiosk = places.kiosk, recycle = places.recycle;
@@ -1160,15 +1173,40 @@
       if (after.level > previous.level && previous.nextCard) dialog.unlocked.push(previous.nextCard);
       ev(social ? 'socialXp' : 'begXp', { id: dialog.npcId, xp: after.xp, level: after.level, gain: gain });
     }
+    function finishFarewell(dialog, n) {
+      var farewell = farewellLine(dialog, who(n));
+      if (farewell.neutral) S.begging.neutralGoodbyes++;
+      appendLogLine(D.hero.name + ' — ' + farewell.line + '  ' + npcName(n) + ' — ' + farewell.reply);
+      n.engaged = false;
+      n.spoken = true;
+      if (R) R.done = S.hero.task;
+      S.hero.task = null;
+      S.begging.dialog = null;
+      ev('done', { k: 'conversation', id: n.id, who: who(n), variant: farewell.id, line: farewell.line, reply: farewell.reply });
+    }
     function playBegCard(id) {
       var dialog = S.begging.dialog;
-      if (!dialog || !Object.prototype.hasOwnProperty.call(D.begging.cards, id)) return false;
+      if (S.over || !dialog || dialog.pending || !Object.prototype.hasOwnProperty.call(D.begging.cards, id)) return false;
       var card = D.begging.cards[id], skill = card.skill || 'begging', progress = skillProgress(skill), n = findNpc(dialog.npcId);
       if (!n || card.level > progress.level || !cardEnabled(id, dialog)) return false;
+
       teleInc(S.tele.begCards, id);
       var practiced = id === 'ask' ? 'begging' : 'social';
       ev('begCard', { id: n.id, who: who(n), card: id, skill: id === 'goodbye' ? undefined : practiced, level: skillProgress(practiced).level });
-      if (id !== 'ask' && id !== 'goodbye') {
+      if (id === 'goodbye') finishFarewell(dialog, n);
+      else dialog.pending = { id: id, t: 0, dur: D.begging.cardSeconds };
+      return true;
+    }
+    function updateDialogue(dt) {
+      var dialog = S.begging.dialog, n = findNpc(S.hero.task.npcId);
+      if (!dialog || !n) { cancelHeroTask(); return; }
+      var pending = dialog.pending;
+      if (!pending) return;
+      pending.t += dt;
+      if (pending.t + 1e-9 < pending.dur) return;
+      var id = pending.id, card = D.begging.cards[id];
+      dialog.pending = null;
+      if (id !== 'ask') {
         var before = giveChance(n, dialog), probability = cardChance(id, n, dialog), ok = rng() < probability;
         var kind = who(n), variant = card.variants ? nextDialogueLine(id, true, dialog) : null;
         var topic = variant ? variant.id : id, line = variant ? variant.line : D.encounterText.lines[id];
@@ -1197,32 +1235,14 @@
         return true;
       }
       S.begging.dialog = null;
-      var result = {}, text = card.feedback;
-      if (id === 'ask') {
-        result = finishHeroTask(dialog, nextDialogueLine(id, true, dialog));
-        text = result.outcome;
-        awardCardXp('begging', dialog, progress);
-      } else {
-        var farewell = farewellLine(dialog, who(n));
-        if (farewell.neutral) S.begging.neutralGoodbyes++;
-        result.variant = farewell.id; result.line = farewell.line; result.reply = farewell.reply;
-        text = '';
-        appendLogLine(D.hero.name + ' — ' + result.line + '  ' + npcName(n) + ' — ' + result.reply);
-        n.engaged = false;
-        n.spoken = true;
-        if (R) R.done = S.hero.task;
-        S.hero.task = null;
-        ev('done', { k: 'conversation', id: n.id, who: who(n), variant: farewell.id, line: result.line, reply: result.reply });
-      }
-      // Доводим прерванный шаг до конца в исходном порядке: награда, предметы, затем NPC.
-      updateItems(dialog.step);
-      updateNpcs(dialog.step);
-      recTrack();
+      var result = finishHeroTask(dialog, nextDialogueLine(id, true, dialog));
+      var text = result.outcome;
+      awardCardXp('begging', dialog, skillProgress('begging'));
       var skills = { social: skillProgress('social'), begging: skillProgress('begging') };
-      return { action: id, ok: !!result.ok, got: result.got || 0, food: result.food || null, text: text, skills: skills,
+      S.begging.result = { action: id, kind: who(n), ok: !!result.ok, got: result.got || 0, food: result.food || null, text: text, skills: skills,
         exchange: { id: result.variant, line: result.line, reply: result.reply, name: npcName(n) },
         why: result.why || null, dropped: !!result.drop,
-        xp: skills.begging.xp, xpGain: id === 'ask' ? D.begging.xpPerAsk : 0, socialGain: dialog.socialGain,
+        xp: skills.begging.xp, xpGain: D.begging.xpPerAsk, socialGain: dialog.socialGain,
         level: skills.begging.level, unlocked: dialog.unlocked.slice() };
     }
 
@@ -1266,12 +1286,14 @@
     /* Приказ «иди»: к месту, встречному, предмету, костру или в точку. Отменяет прежний маршрут и дело. */
     function order(target, x, y) {
       if (S.over || inConversation()) return;
-      if (janitorLessonActive() && (!target || target.kind !== 'place' || target.id !== janitorTarget())) return;
+      if (janitorLessonActive() && (S.janitor.stage === 'report' ||
+          (target && (target.kind !== 'place' || target.id !== janitorTarget())))) return;
       if (target && target.kind === 'janitor' && !janitorView()) return;
       /* Приказ в никуда (цели нет в мире, точки нет) игнорируется: герой продолжает прежнее, журнал и запись не трогаем. */
       var ok = isFinite(x) && isFinite(y) && x !== null && y !== null;
       if (!ok && target) ok = target.kind === 'janitor' || (target.kind === 'place' && !!D.places[target.id]) || (target.kind === 'npc' && !!findNpc(target.id)) || (target.kind === 'item' && !!findItem(target.id));
       if (!ok) return;
+      S.begging.result = null;
       var was = R ? curOrder() : null;
       wake('wake');
       heroLeavePlace();
@@ -1789,6 +1811,21 @@
       if (R) snap('janitor');
       return true;
     }
+    function skipJanitorLesson() {
+      if (!startJanitorLesson()) return false;
+      ev('janitorSkip');
+      // Находки, запас бака и подстилка меняются теми же действиями, что и в уроке.
+      var queuedSounds = S.sfx.length;
+      D.den.janitorLesson.finds.forEach(function () {
+        enterPlace('bin');
+        finishHeroTask();
+      });
+      enterPlace('den');
+      finishHeroTask();
+      enterPlace('bench');
+      S.sfx.length = queuedSounds;
+      return finishJanitorLesson();
+    }
     function finishJanitorLesson() {
       if (!S.janitor || S.janitor.stage !== 'report') return false;
       janitorStage('debt');
@@ -2020,12 +2057,13 @@
     /* ---------- полоски прогресса ---------- */
     function bars() {
       var out = [], t = S.hero.task, i;
-      if (t) {
+      if (t && (t.kind !== 'talk' || S.begging.dialog && S.begging.dialog.pending)) {
         var anchor;
         if (t.placeId) anchor = { kind: 'place', id: t.placeId };
         else if (t.kind === 'talk') anchor = { kind: 'npc', id: t.npcId };
         else anchor = { kind: 'hero', id: 0 };
-        out.push({ key: 'hero', anchor: anchor, p: t.t / t.dur });
+        var timer = t.kind === 'talk' ? S.begging.dialog.pending : t;
+        out.push({ key: 'hero', anchor: anchor, p: timer.t / timer.dur });
       }
       for (i = 0; i < S.items.length; i++) {
         var it = S.items[i];
@@ -2593,7 +2631,7 @@
 
     /* ---------- главный шаг ---------- */
     function update(dt) {
-      if (S.over || inConversation()) return;
+      if (S.over || (S.janitor && S.janitor.talking)) return;
       if (dt > D.speed.maxSubstep && S.hero.task && S.hero.task.kind === 'talk') {
         advance(dt / S.speed);
         return;
@@ -2601,6 +2639,10 @@
       recTrack();
       if (janitorLessonActive()) updateJanitorLesson(dt);
       else update1(dt);
+      if (S.over) {
+        if (S.hero.task && S.hero.task.kind === 'talk') cancelHeroTask();
+        S.begging.result = null;
+      }
       recTrack();
     }
     function update1(dt) {
@@ -2633,14 +2675,9 @@
       updateHero(dt);
       if (S.over) return;
       var t = S.hero.task;
-      if (t) {
+      if (t && t.kind === 'talk') updateDialogue(dt);
+      else if (t) {
         t.t += dt / taskSlowdown();
-        if (t.t >= t.dur && t.kind === 'talk' && findNpc(t.npcId)) {
-          S.begging.dialog = newDialogue(findNpc(t.npcId), dt);
-          ev('begOpen', { id: t.npcId, mood: S.begging.dialog.mood, observation: S.begging.dialog.observationIndex,
-            level: skillProgress('begging').level, xp: S.begging.xp, socialXp: S.begging.socialXp });
-          return;
-        }
         if (t.t >= t.dur) finishHeroTask();
       }
       if (S.over) return;
@@ -2651,7 +2688,7 @@
     /* Реальное время -> игровое с учётом скорости; подшаги не длиннее maxSubstep. */
     function advance(realDt) {
       var left = realDt, guard = 0;
-      while (left > 1e-9 && !S.over && !inConversation() && guard++ < 100000) {
+      while (left > 1e-9 && !S.over && !(S.janitor && S.janitor.talking) && guard++ < 100000) {
         var sp = S.speed;
         var step = Math.min(D.speed.maxSubstep, left * sp);
         update(step);
@@ -2681,7 +2718,7 @@
         walkerTimer: 0, copTimer: 0, grannyAt: null,
         bus: null, busTimer: 0, traffic: null, doorOpen: 0,
         stats: { asks: 0, gave: 0, begMoney: 0 },
-        begging: { xp: 0, socialXp: 0, yardHintsHeard: {}, talksTold: 0, jokesTold: 0, requestsMade: 0, neutralGoodbyes: 0, dialog: null },
+        begging: { xp: 0, socialXp: 0, yardHintsHeard: {}, talksTold: 0, jokesTold: 0, requestsMade: 0, neutralGoodbyes: 0, dialog: null, result: null },
         tele: newTele(),
         wasStarving: false, wasFreezing: false, wasExhausted: false,
         weather: null, weatherLocked: false, entranceLock: 0, entranceStay: 0,
@@ -2779,7 +2816,7 @@
         bus.x = 2 * stopX - bus.x;
       }
       var oldYard = sv.yardLayout !== D.navigation.version;
-      if (oldYard && S.hero.at === 'pipe' && S.hero.asleep) {
+      if (S.hero.asleep && !sleepShelter()) {
         S.hero.asleep = false;
         S.tele.slT = 0;
       }
@@ -2845,6 +2882,21 @@
         R.w.sess = (R.w.sess || 1) + 1; sessT0 = now();
         ev('load', { n: R.w.sess, date: new Date(now()).toISOString(), from: sv.savedAt, dropped: tail.length, missing: Math.max(0, n - evs.length) });
       } else if (opts.record) recBegin(recHead(opts.record));
+      if (!S.begging.result || S.begging.result.action === 'goodbye') S.begging.result = null;
+      var task = S.hero.task;
+      if (task && task.kind === 'talk') {
+        var npc = findNpc(task.npcId);
+        if (S.over || !npc) cancelHeroTask();
+        else if (!dialog) startTalk(npc);          // В прежнем слоте игрок ещё ждал открытия карточек.
+        else {
+          if (dialog.pending === undefined) dialog.pending = null;
+          delete dialog.step;
+          delete task.t;
+          delete task.dur;
+          npc.engaged = true;
+          if (dialog.pending && dialog.pending.id === 'goodbye') finishFarewell(dialog, npc);
+        }
+      }
       return true;
     }
     /* Строка журнала без игрового генератора (сохранение, выгрузка): выбор варианта — Math.random, на исход не влияет */
@@ -2872,12 +2924,12 @@
       update: update,
       advance: advance,
       denNext: denNext, denNeedText: denNeedText, denPreview: denPreview, denDone: denDone,   // правка 022: лежбище и заначка
-      startJanitorLesson: startJanitorLesson, finishJanitorLesson: finishJanitorLesson, payJanitor: payJanitor,
+      startJanitorLesson: startJanitorLesson, skipJanitorLesson: skipJanitorLesson, finishJanitorLesson: finishJanitorLesson, payJanitor: payJanitor,
       janitorLessonActive: janitorLessonActive, janitorTarget: janitorTarget,
       janitorView: janitorView, closeJanitorTalk: closeJanitorTalk,
       stashPut: stashPut, stashTake: stashTake, stashReady: stashReady, stashCap: stashCap,
       setSpeed: setSpeed,
-      toggleSleep: toggleSleep,
+      inConversation: inConversation, sleepShelter: sleepShelter, toggleSleep: toggleSleep,
       useInv: useInv,
       unwear: unwear,
       gearStats: gearStats,
@@ -2940,6 +2992,7 @@
       walkerSpeed: walkerSpeed,
       giveChance: giveChance,
       begView: begView, playBegCard: playBegCard,
+      closeBegResult: function () { S.begging.result = null; },
       npcName: npcName,
       talkable: talkable,
       entranceMood: entranceMood
@@ -3246,19 +3299,6 @@
       catchCache = {}; warnSig = null; warnOff = 0; shivering = false; lastFrost = -1; hotId = 0;
       elField.style.setProperty('--frost', '0');
       heroEl = makeTile('hero', 0, D.hero.emoji, D.hero.name, 'hero');
-      var sb = document.createElement('button');
-      sb.type = 'button';
-      sb.className = 'sleep-btn';
-      sb.id = 'sleep-btn';
-      sb.textContent = D.hero.sleepEmoji;
-      sb.setAttribute('aria-label', 'Спать / проснуться');
-      sb.addEventListener('click', function (e) {
-        e.stopPropagation();
-        game.toggleSleep();
-        sb.blur();
-        render();
-      });
-      heroEl.appendChild(sb);
       lastLogSeq = -1;
       endShown = false;
       elEnd.classList.add('hidden');
@@ -3270,6 +3310,7 @@
     function setPaused(v, why) {
       if (game && started && why && v !== paused) game.recEvent('pause', { on: v ? 1 : 0, why: why });   // правка 017: в запись
       paused = v;
+      $('dialogue-resume').hidden = !v;
       if (!v) awayPaused = false;
       elPauseNote.textContent = D.ui.awayNote;
       elPauseNote.classList.toggle('hidden', !(v && awayPaused));
@@ -3354,7 +3395,7 @@
     }
     function updateHot() {
       var hot = null, t = lastPt && lastPt.target, el;
-      if (lastPt && lastPt.inField && started && !invDrag && !game.state.over && !(t.closest && t.closest('.sleep-btn, #shop-menu'))) {
+      if (lastPt && lastPt.inField && started && !invDrag && !game.state.over && !(t.closest && t.closest('#shop-menu'))) {
         el = directTile(t, lastPt.x, lastPt.y);
         if (!el || el.classList.contains('walker') || el.dataset.kind === 'hero') { var pk = pickAt(lastPt.x, lastPt.y); hot = pk && pk.kind === 'npc' ? pk.n : null; }
       }
@@ -3399,9 +3440,8 @@
       for (key in barEls) {
         el = barEls[key];
         w = el.offsetWidth + 44;                              // справа ещё счётчик «×N»
-        var isTalkBar = el.classList.contains('bar-talk');
-        wo = isTalkBar ? -30 : el.classList.contains('bar-place') ? -84 : -62;
-        obs.push({ l: parseFloat(el.style.left) - el.offsetWidth / 2, r: parseFloat(el.style.left) - el.offsetWidth / 2 + w, t: parseFloat(el.style.top) + wo, b: parseFloat(el.style.top) + (isTalkBar ? 0 : wo + el.offsetHeight) });
+        wo = el.classList.contains('bar-place') ? -84 : -62;
+        obs.push({ l: parseFloat(el.style.left) - el.offsetWidth / 2, r: parseFloat(el.style.left) - el.offsetWidth / 2 + w, t: parseFloat(el.style.top) + wo, b: parseFloat(el.style.top) + wo + el.offsetHeight });
       }
       var atlasHeight = heroEl.classList.contains('hero-atlas') && !S.hero.asleep ? heroEl.offsetHeight + 8 : 0;
       var bottom = py - Math.max(W.baseOffsetPx, atlasHeight), pad = 4, i, hit, tries;
@@ -3417,6 +3457,24 @@
       if (Math.abs(target - warnOff) < 0.5) warnOff = target;
       elWarn.style.left = px + 'px';
       elWarn.style.top = (py + warnOff) + 'px';
+    }
+    function renderShelterActions() {
+      var h = game.state.hero, panel = $('shelter-actions');
+      var visible = started && game.sleepShelter() && !h.asleep && h.energy < D.hero.max &&
+        !game.state.over && !game.janitorLessonActive() && !game.inConversation();
+      panel.classList.toggle('hidden', !visible);
+      if (!visible) return;
+      if (panel.dataset.place !== h.at) {
+        panel.dataset.place = h.at;
+        $('shelter-hint').textContent = D.hero.shelterActions[h.at];
+      }
+      var hero = heroEl.getBoundingClientRect(), center = hero.left + hero.width / 2;
+      var top = hero.top;
+      if (elWarn && !elWarn.classList.contains('hidden')) top = Math.min(top, elWarn.getBoundingClientRect().top);
+      var left = Math.max(4, Math.min(center - panel.offsetWidth / 2, elField.clientWidth - panel.offsetWidth - 4));
+      panel.style.left = left + 'px';
+      panel.style.top = Math.max(4, top - panel.offsetHeight - 7) + 'px';
+      panel.style.setProperty('--pointer-x', (center - left) + 'px');
     }
     function renderFrostShiver() {
       var S = game.state, W = D.ui.warn, fl = game.frostLevel();
@@ -3438,30 +3496,6 @@
       st.fill.style.width = Math.max(0, Math.min(100, v / D.hero.max * 100)) + '%';
       st.val.textContent = String(shown);
       st.box.classList.toggle('low', v < D.hero.lowThreshold);
-    }
-
-    function placeTalkBar(bar, hero, partner) {
-      // Общая подпись беседы находится над графикой двора. На невысоком экране помещаем её ниже собеседников.
-      var half = bar.offsetWidth * .5, w = game.field.w, h = game.field.h;
-      var x = Math.min(w - half - 3, Math.max(half + 3, (hero.x + partner.x) * .5 * w));
-      var heroHeight = heroEl.classList.contains('hero-atlas') ? heroEl.offsetHeight : 62;
-      var y = Math.min(hero.y * h - heroHeight, partner.y * h - 62) - 16;
-      if (y - 30 < $('hud').offsetHeight + 4) {
-        var top = Math.max(hero.y, partner.y) * h + 17;
-        Object.keys(placeEls).forEach(function (id) {
-          var el = placeEls[id], label = el.children[1].getBoundingClientRect();
-          var sub = el.children[2].getBoundingClientRect();
-          var bottom = Math.max(label.bottom, sub.bottom);
-          if (label.right >= x - half && label.left <= x + half && label.top < top + 30 && bottom > top - 8) top = bottom + 5;
-        });
-        y = Math.min(h - 2, top + 30);
-      }
-      bar.style.left = x + 'px'; bar.style.top = y + 'px';
-      var left = hero.x <= partner.x ? D.hero.name : game.npcName(partner);
-      var right = hero.x <= partner.x ? game.npcName(partner) : D.hero.name;
-      var names = bar.children[2];
-      if (names.firstChild.textContent !== left) names.firstChild.textContent = left;
-      if (names.lastChild.textContent !== right) names.lastChild.textContent = right;
     }
 
     function render() {
@@ -3517,7 +3551,7 @@
       }
 
       /* У разговаривающих есть свои игровые координаты. Если они совпали, в кадре разводим собеседников. */
-      var partner = S.hero.task && S.hero.task.kind === 'talk' ? game.findNpc(S.hero.task.npcId) : null;
+      var partner = S.begging.dialog ? game.findNpc(S.begging.dialog.npcId) : null;
       var heroShift = 0;
       if (partner && Math.abs(S.hero.y - partner.y) * game.field.h < 64) {
         var gap = (S.hero.x - partner.x) * game.field.w;
@@ -3672,6 +3706,7 @@
       seen = {};
       for (i = 0; i < bars.length; i++) {
         var b = bars[i];
+        if (partner && b.anchor.kind === 'npc' && b.anchor.id === partner.id) continue;
         var pos = anchorPos(b.anchor);
         if (!pos) continue;
         seen[b.key] = true;
@@ -3685,15 +3720,6 @@
         }
         el.style.left = (pos.x * game.field.w) + 'px';
         el.style.top = (pos.y * game.field.h) + 'px';
-        var talkBar = partner && b.anchor.kind === 'npc' && b.anchor.id === partner.id;
-        el.classList.toggle('bar-talk', !!talkBar);
-        if (talkBar) {
-          if (!el.children[2]) {
-            var names = document.createElement('span');
-            names.className = 'talk-names'; names.innerHTML = '<span></span><span></span>'; el.appendChild(names);
-          }
-          placeTalkBar(el, S.hero, partner);
-        }
         el.classList.toggle('bar-place', b.anchor.kind === 'place');
         el.children[0].style.width = Math.max(0, Math.min(100, b.p * 100)) + '%';
         el.children[1].textContent = b.count && b.count > 1 ? '×' + b.count : '';
@@ -3708,6 +3734,7 @@
       renderGear();
 
       renderWarn();
+      renderShelterActions();
       renderFrostShiver();
       updateHot();
 
@@ -3971,9 +3998,10 @@
           thought.textContent = beat ? C.janitor.thoughts[beat] : '';
         });
       }
-      function enterYard() {
+      function enterYard(skipLesson) {
         global.BomzhArrival.stop();
-        game.startJanitorLesson();
+        if (skipLesson) game.skipJanitorLesson();
+        else game.startJanitorLesson();
         closeStory();
         started = true;
         elStart.classList.add('hidden');
@@ -3981,6 +4009,7 @@
         $('start-card').hidden = false;
         flushRec();
       }
+      function skipOpening() { enterYard(true); }
       $('arrival-address').textContent = C.arrivalLabel;
       ring.textContent = C.ringIntercom;
       ring.addEventListener('click', function () {
@@ -3996,9 +4025,9 @@
       $('janitor-decline').textContent = C.janitor.leave;
       $('janitor-decline').addEventListener('click', closeJanitorDialogue);
       $('arrival-skip').textContent = C.skipPrologue;
-      $('arrival-skip').addEventListener('click', enterYard);
+      $('arrival-skip').addEventListener('click', skipOpening);
       $('prologue-skip').textContent = C.skipPrologue;
-      $('prologue-skip').addEventListener('click', enterYard);
+      $('prologue-skip').addEventListener('click', skipOpening);
       $('prologue-next').addEventListener('click', function () {
         sceneIndex++;
         if (sceneIndex === C.prologue.length) startArrival();
@@ -4057,12 +4086,13 @@
         return;
       }
       if (t && t.closest && t.closest('#clock')) { tip = { kind: 'clock', id: 0, x: e.clientX, y: e.clientY }; return; }
+      if (t && t.closest && t.closest('#shelter-actions')) return;
       var wr = elWeather.getBoundingClientRect();           // плашка погоды мышь не ловит (pointer-events), поэтому по прямоугольнику
       if (e.clientX >= wr.left && e.clientX <= wr.right && e.clientY >= wr.top && e.clientY <= wr.bottom) { tip = { kind: 'weather', id: 0, x: e.clientX, y: e.clientY }; return; }
       var gsl = t && t.closest ? t.closest('.gear-slot') : null;
       if (gsl) { tip = { kind: 'gear', id: gsl.dataset.slot, x: e.clientX, y: e.clientY }; return; }
       if (t && t.closest && t.closest('#gear-sum, #gear-title')) { tip = { kind: 'gearsum', id: 0, x: e.clientX, y: e.clientY }; return; }
-      if (t && t.closest && t.closest('#shop-menu, #hud, #end-screen, #start-screen, .sleep-btn')) return;
+      if (t && t.closest && t.closest('#shop-menu, #hud, #end-screen, #start-screen')) return;
       var stEl = t && t.closest ? t.closest('.stat') : null;
       if (stEl) { tip = { kind: 'stat', id: stEl.id.replace('stat-', ''), x: e.clientX, y: e.clientY }; return; }
       if (t && t.closest && t.closest('#field') && (!el || el.classList.contains('walker'))) {      // крупная зона вокруг прохожего: подсказка и там
@@ -4224,23 +4254,43 @@
       return (chance * 100).toLocaleString('ru-RU', { maximumFractionDigits: 1 }) + '%';
     }
 
+    function dialoguePortrait(kind) {
+      var rows = { student: 0, worker: 3, coat: 6, fat: 9, drunk: 12, granny: 15 };
+      dialoguePanel.style.setProperty('--portrait-row', ((rows[kind] || 0) * 100 / 21) + '%');
+    }
+
     function renderDialogue() {
-      if (!started || game.state.over || (!game.state.begging.dialog && dialogueResult.hidden) || gameMenuOpen || slotMode) {
+      var state = game.state.begging;
+      if (!started || game.state.over || (!state.dialog && !state.result) || gameMenuOpen || slotMode) {
         if (dialoguePanel.open) dialoguePanel.close();
+        dialogueResult.hidden = true;
         dialogueSig = '';
         return;
       }
-      if (!dialogueResult.hidden) return;
-      var state = game.state.begging, sig = [state.dialog.npcId, state.dialog.used, state.dialog.question, state.xp, state.socialXp].join('|');
-      if (sig === dialogueSig) return;
+      var opening = !dialoguePanel.open;
+      if (opening) {
+        endInvDrag(); keysDown = {}; game.setMoveDir(0, 0);
+        tip = null; hideTip();
+        dialoguePanel.showModal();
+      }
+      if (state.result) {
+        if (dialogueResult.hidden) showDialogueResult(state.result);
+        return;
+      }
+      dialogueResult.hidden = true;
+      var pending = state.dialog.pending;
+      var sig = [state.dialog.npcId, state.dialog.used, state.dialog.question, state.xp, state.socialXp, paused, pending && pending.id].join('|');
+      if (sig === dialogueSig) {
+        if (pending) updateDialogueProgress(pending);
+        return;
+      }
       var view = game.begView();
       dialogueSig = sig;
       var ui = D.ui.dialogue;
       $('dialogue-context').textContent = ui.context;
       $('dialogue-title').textContent = view.name;
       $('dialogue-observation').textContent = view.observation;
-      var rows = { student: 0, worker: 3, coat: 6, fat: 9, drunk: 12, granny: 15 };
-      dialoguePanel.style.setProperty('--portrait-row', ((rows[view.kind] || 0) * 100 / 21) + '%');
+      dialoguePortrait(view.kind);
       var feedback = $('dialogue-feedback');
       if (view.exchange) {
         feedback.innerHTML = '<strong>' + esc(D.hero.name) + '</strong> — ' + esc(view.exchange.line) +
@@ -4260,7 +4310,7 @@
       var cards = view.cards.sort(function (a, b) { return (endings[a.id] || 0) - (endings[b.id] || 0); });
       dialogueCards.innerHTML = cards.map(function (card) {
         var odds = '';
-        if (card.enabled && card.chance != null) {
+        if (card.chance != null) {
           odds = '<span class="dialogue-odds">' + esc(card.id === 'ask' ? ui.helpChance : ui.chance) +
             ' ' + esc(dialoguePercent(card.chance)) + '</span>';
         }
@@ -4268,47 +4318,54 @@
         if (card.id === 'ask' && view.kind === 'granny') {
           description = ui.moneyOdds + ' ' + dialoguePercent(view.moneyChance) + ' · ' + ui.foodOdds + ' ' + dialoguePercent(view.foodChance);
         }
-        return '<button type="button" data-dialogue-card="' + esc(card.id) + '"' + (card.enabled ? '' : ' disabled') +
+        return '<button type="button" data-dialogue-card="' + esc(card.id) + '"' + (card.enabled && !paused ? '' : ' disabled') +
           '><strong>' + esc(card.label) + '</strong>' + (card.line ? '<small>' + esc(card.line) + '</small>' : '') +
-          '<small>' + esc(description) + '</small>' + odds + '</button>';
+          '<small>' + esc(description) + '</small>' + odds + (pending && card.id === pending.id ? '<progress class="dialogue-card-progress" aria-label="' + esc(card.label) + '"></progress>' : '') + '</button>';
       }).join('');
-      if (!dialoguePanel.open) {
-        dialogueResult.hidden = true;
-        endInvDrag(); keysDown = {}; game.setMoveDir(0, 0);
-        tip = null; hideTip();
-        dialoguePanel.showModal();
-        $('dialogue-title').focus({ preventScroll: true });
-      } else {
-        $('dialogue-feedback').focus({ preventScroll: true });
-      }
+      $('dialogue-farewell').replaceChildren(dialogueCards.querySelector('[data-dialogue-card="goodbye"]'));
+      if (pending) updateDialogueProgress(pending);
+      else if (opening) $('dialogue-title').focus({ preventScroll: true });
+      else $('dialogue-feedback').focus({ preventScroll: true });
     }
-
+    function updateDialogueProgress(pending) {
+      var progress = dialogueCards.querySelector('progress');
+      if (progress) { progress.max = pending.dur; progress.value = pending.t; }
+    }
     function chooseDialogueCard(id) {
-      var result = game.playBegCard(id);
-      if (result && typeof result === 'object') {
-        var ui = D.ui.dialogue;
-        var summary = $('dialogue-exchange');
-        if (result.exchange) {
-          summary.innerHTML = '<b>' + esc(D.hero.name) + '</b> — ' + esc(result.exchange.line) +
-            '<br><b>' + esc(result.exchange.name) + '</b> — ' + esc(result.exchange.reply) +
-            (result.text ? '<br><b>' + esc(result.text) + '</b>' : '');
-        } else summary.textContent = result.text;
-        $('dialogue-growth').innerHTML =
-          dialogueSkillBars(ui.social, result.skills.social, result.socialGain, D.begging.socialLevels) +
-          dialogueSkillBars(ui.skill, result.skills.begging, result.xpGain, D.begging.levels);
-        $('dialogue-unlocked').textContent = result.unlocked.length ? ui.unlocked + ' «' + result.unlocked.join('», «') + '»' : '';
-        dialogueResult.hidden = false;
-        $('dialogue-context').textContent = ui.resultTitle;
-        dialoguePanel.scrollTop = 0;
-        $('dialogue-result-close').focus({ preventScroll: true });
-      }
-      render();
+      if (!paused && game.playBegCard(id)) render();
+    }
+    function showDialogueResult(result) {
+      var ui = D.ui.dialogue;
+      $('dialogue-title').textContent = result.exchange.name;
+      dialoguePortrait(result.kind);
+      var summary = $('dialogue-exchange');
+      if (result.exchange) {
+        summary.innerHTML = '<b>' + esc(D.hero.name) + '</b> — ' + esc(result.exchange.line) +
+          '<br><b>' + esc(result.exchange.name) + '</b> — ' + esc(result.exchange.reply) +
+          (result.text ? '<br><b>' + esc(result.text) + '</b>' : '');
+      } else summary.textContent = result.text;
+      $('dialogue-growth').innerHTML =
+        dialogueSkillBars(ui.social, result.skills.social, result.socialGain, D.begging.socialLevels) +
+        dialogueSkillBars(ui.skill, result.skills.begging, result.xpGain, D.begging.levels);
+      $('dialogue-unlocked').textContent = result.unlocked.length ? ui.unlocked + ' «' + result.unlocked.join('», «') + '»' : '';
+      dialogueResult.hidden = false;
+      $('dialogue-context').textContent = ui.resultTitle;
+      dialoguePanel.scrollTop = 0;
+      $('dialogue-result-close').focus({ preventScroll: true });
     }
     function closeDialogueResult() {
+      game.closeBegResult();
       dialogueResult.hidden = true;
       dialoguePanel.close();
       dialogueSig = '';
     }
+    function resumeDialogue(why) {
+      setPaused(false, why);
+      render();
+      if (!dialogueResult.hidden) $('dialogue-result-close').focus();
+      else $('dialogue-title').focus({ preventScroll: true });
+    }
+    $('dialogue-resume').addEventListener('click', function () { resumeDialogue('button'); });
     $('dialogue-result-close').addEventListener('click', closeDialogueResult);
     dialoguePanel.addEventListener('click', function (e) {
       if (dialogueResult.hidden || e.target !== dialoguePanel) return;
@@ -4317,10 +4374,12 @@
     });
     dialoguePanel.addEventListener('cancel', function (e) {
       e.preventDefault();
-      if (dialogueResult.hidden) chooseDialogueCard('goodbye');
+      if (dialogueResult.hidden) {
+        if (!game.state.begging.dialog.pending) chooseDialogueCard('goodbye');
+      }
       else closeDialogueResult();
     });
-    dialogueCards.addEventListener('click', function (e) {
+    dialoguePanel.addEventListener('click', function (e) {
       var card = e.target.closest('button[data-dialogue-card]');
       if (card && !card.disabled && dialoguePanel.open) chooseDialogueCard(card.dataset.dialogueCard);
     });
@@ -4362,15 +4421,14 @@
         }
         return;
       }
-      if (t.closest && t.closest('.sleep-btn, #shop-menu, #stash')) return;
+      if (t.closest && t.closest('#shop-menu, #stash')) return;
       if (game.janitorLessonActive()) {
         var target = game.janitorTarget();
         var box = target && placeEls[target].getBoundingClientRect();
-        if (box && e.clientX >= box.left && e.clientX <= box.right && e.clientY >= box.top && e.clientY <= box.bottom && !game.state.hero.task) {
-          game.order({ kind: 'place', id: target });
-          render();
+        if (box && e.clientX >= box.left && e.clientX <= box.right && e.clientY >= box.top && e.clientY <= box.bottom) {
+          if (!game.state.hero.task) { game.order({ kind: 'place', id: target }); render(); }
+          return;
         }
-        return;
       }
       if (game.state.menuOpen) { game.closeMenu(); render(); return; }  // клик мимо открытого меню — только закрыть его, бомж стоит где стоял
       var el = directTile(t, e.clientX, e.clientY);
@@ -4473,9 +4531,16 @@
       setPaused(!paused, 'button');
       elPauseBtn.blur();
     });
+    $('shelter-sleep').querySelector('span').textContent = D.hero.shelterActions.sleep;
+    $('shelter-sleep').onclick = function () { game.toggleSleep(); render(); };
     document.addEventListener('keydown', function (e) {
+      if (dialoguePanel.open && paused && (e.code === 'Space' || e.key === ' ')) {
+        e.preventDefault();
+        if (!e.repeat) resumeDialogue('key');
+        return;
+      }
       if (gameMenuOpen || slotMode || !started || storyLines || game.state.over || document.querySelector('dialog[open]')) return;
-      if (e.target.closest && e.target.closest('#janitor-actor') && (e.key === 'Enter' || e.key === ' ')) return;
+      if (e.target.closest && e.target.closest('#janitor-actor, #shelter-actions button') && (e.key === 'Enter' || e.key === ' ')) return;
       if (e.code === 'Space' || e.key === ' ') {
         e.preventDefault();
         if (!e.repeat && !game.state.over) setPaused(!paused, 'key');
@@ -4763,7 +4828,7 @@
       var dt = lastTs ? (ts - lastTs) / 1000 : 0;
       lastTs = ts;
       if (dt > D.ui.maxFrameDt) dt = D.ui.maxFrameDt;
-      if (started && !paused && !storyLines && !game.state.over && !game.state.begging.dialog && dialogueResult.hidden && dt > 0) {
+      if (started && !paused && !storyLines && !game.state.over && dt > 0) {
         game.advance(dt);
         if (!game.janitorLessonActive()) game.noteWarnings();
       }
@@ -4778,7 +4843,7 @@
         var hasFire = false;
         for (var fi = 0; fi < SS.items.length; fi++) if (SS.items[fi].type === 'fire') hasFire = true;
         global.BomzhSound.frame({
-          paused: paused || !started || !!storyLines || !!SS.begging.dialog || !dialogueResult.hidden, speed: SS.speed, night: game.isNight(),
+          paused: paused || !started || !!storyLines, speed: SS.speed, night: game.isNight(),
           wind: SS.weather.wind, precip: SS.weather.precip, type: SS.weather.type,
           bus: SS.bus, listenerX: SS.hero.x, listenerY: SS.hero.y,
           walking: SS.hero.walking, walkSpeed: game.walkSpeed(), at: SS.hero.at,

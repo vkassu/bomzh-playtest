@@ -540,10 +540,7 @@
       '<path d="M14.5 4h5.5l-5.5 5.5h5.5" fill="none" stroke="#9fc4e0" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>'); },
     'warn:health': function () { return svg(24, 24,
       '<path d="M12 21.2C6 16.6 2.6 13.2 2.6 9.2a4.7 4.7 0 0 1 9.4-1.3a4.7 4.7 0 0 1 9.4 1.3c0 4-3.4 7.4-9.4 12z" fill="#c8483c" stroke="#12161a" stroke-width="1.8" stroke-linejoin="round"/>' +
-      '<path d="M12 8.6v6.2M8.9 11.7h6.2" fill="none" stroke="#f1dfda" stroke-width="2.2" stroke-linecap="round"/>'); },
-    'ui:sleep': function () { return svg(24, 24,
-      '<path d="M14 4a8.5 8.5 0 1 0 7 12.5a7 7 0 0 1-7-12.5z" fill="#d6e2ea" stroke="#12161a" stroke-width="1.5" stroke-linejoin="round"/>' +
-      '<path d="M15 5h5l-5 5h5" fill="none" stroke="#d6e2ea" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>'); }
+      '<path d="M12 8.6v6.2M8.9 11.7h6.2" fill="none" stroke="#f1dfda" stroke-width="2.2" stroke-linecap="round"/>'); }
   };
 
   SPRITES['stat:satiety'] = SPRITES['warn:hunger'];        // сытость и здоровье — те же рисунки, что у значков над героем
@@ -567,7 +564,7 @@
     },
     weather: function (t) { return [null, '#weather-icon[data-type="' + t + '"]']; },
     warn: function (t) { return [null, '.warn-ico[data-w="' + t + '"]']; },
-    ui: function (t) { return { money: [null, '#money-icon'], sleep: [null, '.sleep-btn'], sound: [null, '#sound-btn'], mute: [null, '#sound-btn.off'] }[t] || []; }
+    ui: function (t) { return { money: [null, '#money-icon'], sound: [null, '#sound-btn'], mute: [null, '#sound-btn.off'] }[t] || []; }
   };
 
   function buildSpriteCss() {
@@ -978,7 +975,131 @@
   var binFront = { id: 'bin-front', block: 'bin', x: 1380, y: 322, w: 144, h: 88,
     outline: 'M5 32L11 10Q15 1 36 4L106 4Q134 0 137 13L140 30L143 39L137 47L135 72L128 76Q128 85 122 85L116 82L115 76L34 76Q34 85 27 85L21 76L10 74L7 46L3 43Z' };
   var foregroundOccluders = [tableFront, kioskFront, recycleFront, stopFront, binFront];
-  var foreground = [benchFront].concat(foregroundOccluders);
+  // Координаты подошвы совпадают с переходами глубины у лавки и перед ларьком.
+  var litterBins = [
+    { id: 'door-urn', x: 731, y: 217, w: 34, h: 39, paint: paintPendulumUrn, paintGround: paintDoorUrnGround },
+    { id: 'kiosk-urn', x: 612, y: 658, w: 30, h: 42, paint: paintUrn, paintGround: paintKioskUrnGround }
+  ];
+  var foreground = [benchFront].concat(foregroundOccluders, litterBins);
+
+  function paintPendulumUrn(ctx, bin) {
+    // Литая чаша висит на поперечной оси между стойками, над тяжёлой плитой.
+    ctx.save();
+    ctx.scale(bin.w / 28, bin.h / 32);
+    var iron = ctx.createLinearGradient(4, 0, 24, 0);
+    iron.addColorStop(0, '#353b37');
+    iron.addColorStop(.42, '#51584d');
+    iron.addColorStop(.73, '#777669');
+    iron.addColorStop(1, '#484841');
+    ctx.fillStyle = '#3d3c37';
+    ctx.fill(new Path2D('M1 28.5L5 26.7L25 27.2L27.5 29L26 31.4L2 31Z'));
+    ctx.fillStyle = '#787264';
+    ctx.fill(new Path2D('M1 28.5L5 26.7L25 27.2L27.5 29L22 29.5Z'));
+    ctx.fillStyle = iron;
+    ctx.fill(new Path2D('M1.5 28L2.5 12Q3 9.7 5 11L5.4 14L4.6 25L7 28Z M20.8 28.3L23 25L23 11Q25 9.6 26 12L26.5 28.4Z'));
+    ctx.fill(new Path2D('M4.1 5.3Q4.7 12.5 7.1 19.5Q8.4 23.8 13.4 24.4Q19.5 24.8 21.4 19Q23.3 12.4 24 5.3Z'));
+    ctx.lineWidth = 1.2;
+    ctx.strokeStyle = '#343b35';
+    ctx.stroke(new Path2D('M6.8 8Q8 17.5 10 21 M11 8.8Q11.6 18.7 12.1 22.6 M16.2 8.8L15.6 22.8 M21 8Q20.5 16.3 18.1 21.6'));
+    ctx.lineWidth = .7;
+    ctx.strokeStyle = '#969181';
+    ctx.stroke(new Path2D('M17.6 9Q17.8 16 16.4 21.7 M22 8.7Q21.6 15 19.5 19.2 M25.1 15L25.5 25'));
+    ctx.fillStyle = '#3e4139';
+    ctx.beginPath(); ctx.ellipse(14, 5.2, 11.2, 4.25, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = '#99917e'; ctx.lineWidth = 1.4;
+    ctx.beginPath(); ctx.ellipse(14, 4.7, 10.4, 3.25, 0, 0, Math.PI * 2); ctx.stroke();
+    ctx.fillStyle = '#252b26';
+    ctx.beginPath(); ctx.ellipse(14, 4.9, 8.8, 2.1, 0, 0, Math.PI * 2); ctx.fill();
+    [3.7, 24.5].forEach(function (x) {
+      ctx.fillStyle = '#393a34';
+      ctx.beginPath(); ctx.arc(x, 12.5, 2.1, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#9d8b70';
+      ctx.beginPath(); ctx.arc(x + .4, 12.1, 1, 0, Math.PI * 2); ctx.fill();
+    });
+    ctx.restore();
+  }
+
+  function paintUrn(ctx, bin) {
+    ctx.save();
+    // Две сварные стойки из уголка видны по бокам и ниже корпуса.
+    ctx.fillStyle = '#3d4543';
+    ctx.fillRect(1, 11, 2.8, 30);
+    ctx.fillRect(26.5, 12, 2.8, 30);
+    ctx.fillRect(3, 14, 24, 2);
+    ctx.fillStyle = '#888779';
+    ctx.fillRect(1.2, 12, .8, 26);
+    ctx.fillRect(26.7, 13, .8, 25);
+    ctx.translate(3, 0);
+    ctx.scale(.92, .92);
+    var metal = ctx.createLinearGradient(1, 0, 25, 1);
+    metal.addColorStop(0, '#3b4141');
+    metal.addColorStop(.22, '#758980');
+    metal.addColorStop(.43, '#536f66');
+    metal.addColorStop(.79, '#494f49');
+    metal.addColorStop(1, '#353b39');
+    var body = new Path2D('M1.6 5 Q12 1.5 24.5 5 L23.2 30.7 C22 35 4 35 2.7 30.6 Z');
+    ctx.fillStyle = metal; ctx.fill(body);
+    ctx.save(); ctx.clip(body);
+    var rand = rngFrom(bin.x);
+    for (var i = 0; i < 130; i++) {
+      var x = rand() * 26, y = rand() * 33;
+      ctx.fillStyle = y > 28 ? 'rgba(103,62,39,.57)' : i % 3 ? 'rgba(35,37,35,.16)' : 'rgba(207,197,164,.32)';
+      ctx.fillRect(x, y, .4 + rand() * 1.4, .4 + rand() * 1.3);
+    }
+    // На краях сколов видны рыжий грунт и тусклый голый металл.
+    ctx.fillStyle = '#876c53';
+    ctx.fill(new Path2D('M4 10L7 9 7.8 10.3 6.6 11 7.1 12 4.8 12.6Z M16 25L19 23.8 19.8 25.6 18.1 26 17.4 27 15.8 26Z'));
+    ctx.fillStyle = '#a39e88';
+    ctx.fillRect(4.8, 10.6, 1.7, .8);
+    ctx.fillRect(17, 25, 1.4, .8);
+    ctx.strokeStyle = '#404641'; ctx.lineWidth = .7;
+    ctx.stroke(new Path2D('M19 8 L18.6 30 M2 28.5 Q12 33.5 24 28.5'));
+    ctx.strokeStyle = '#959486'; ctx.stroke(new Path2D('M4 29.5 Q9 32 13 31.8'));
+    ctx.restore();
+    ctx.fillStyle = '#51493e';
+    ctx.beginPath(); ctx.ellipse(13, 5.7, 12.3, 4.5, 0, 0, 2 * Math.PI); ctx.fill();
+    var inside = ctx.createLinearGradient(0, 1.5, 0, 8.3);
+    inside.addColorStop(0, '#777364'); inside.addColorStop(.48, '#393c37'); inside.addColorStop(1, '#202622');
+    ctx.fillStyle = inside;
+    ctx.beginPath(); ctx.ellipse(13, 5.1, 10.6, 3.1, 0, 0, 2 * Math.PI); ctx.fill();
+    ctx.strokeStyle = '#c3c0ac'; ctx.lineWidth = 1.15;
+    ctx.beginPath(); ctx.ellipse(13, 5, 11.8, 3.9, 0, Math.PI * .91, Math.PI * 1.55); ctx.stroke();
+    ctx.restore();
+  }
+
+  function paintDoorUrnGround(bin) {
+    bc.save();
+    bc.scale(W / courtyard.width, H / courtyard.height);
+    bc.translate(bin.x + bin.w / 2, bin.y + bin.h);
+    // Потёртый снег тянется к ступеням. Слева остаётся снег с исходного рисунка.
+    bc.save();
+    bc.clip(new Path2D('M-14 -3 Q-4 -5 6 -4 L16 -6 20 -5 30 -7 27 -4 37 -5 Q30 -2 25 -1 L29 0 17 1 13 3 6 2 2 4 -5 3 -9 4 -14 1Z'));
+    bc.globalAlpha = .58;
+    bc.drawImage(courtyard, 792, 257, 56, 15, -16, -9, 56, 15);
+    bc.restore();
+    bc.shadowColor = 'rgba(40,37,39,.5)';
+    bc.shadowBlur = 2;
+    bc.fillStyle = 'rgba(42,39,36,.4)';
+    bc.fill(new Path2D('M-16 -3 L11 -4 16 -1 10 1 -12 2 -19 0Z'));
+    bc.restore();
+  }
+
+  function paintKioskUrnGround(bin) {
+    bc.save();
+    bc.scale(W / courtyard.width, H / courtyard.height);
+    bc.translate(bin.x, bin.y + bin.h);
+    // Сохраняем сугроб между стойками. У тротуара остаётся след от носка ботинка.
+    bc.globalAlpha = .34;
+    bc.save();
+    bc.clip(new Path2D('M6 6L11 3 16 2 20 3 17 5 12 6 9 8 5 8Z'));
+    bc.drawImage(courtyard, 550, 717, 18, 9, 4, 1, 18, 9);
+    bc.restore();
+    bc.fillStyle = '#33363a';
+    bc.shadowColor = '#414044';
+    bc.shadowBlur = 1.5;
+    bc.fill(new Path2D('M1 -2L4 -2 9 0 5 1 1 0Z M26.5 -1L29.5 -1 34 1 31 2 27 1Z'));
+    bc.restore();
+  }
 
   function paintFurniture(cutout) {
     if (!cutout.canvas) {
@@ -994,6 +1115,11 @@
       cutout.canvas = canvas;
     }
     var ctx = cutout.canvas.getContext('2d');
+    if (litterBins.indexOf(cutout) >= 0) {
+      ctx.clearRect(0, 0, cutout.w, cutout.h);
+      cutout.paint(ctx, cutout);
+      return;
+    }
     var shop = cutout.shop;
     var closed = shop && closedShopArt && shop.closed;
     var replacement = cutout.patch && cutout.patch.image ? cutout.patch : null;
@@ -1251,6 +1377,7 @@
       foreground.forEach(paintFurniture);
       paintShopFronts(true);
       paintEntrance(true);
+      litterBins.forEach(function (bin) { bin.paintGround(bin); });
       // Границы стёкол фасада на исходном холсте 1808×870. Рамы и снег остаются поверх света.
       var glazed = [[29, 24, 50, 56, 78, 80], [200, 24, 221, 228, 252, 80],
         [303, 24, 322, 330, 353, 77], [498, 21, 519, 526, 552, 78],
